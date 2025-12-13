@@ -1,14 +1,14 @@
 use crate::crypto::Block;
 
-pub struct Plain {}
+pub struct PlainBlock {}
 
-impl Plain {
+impl PlainBlock {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl Block for Plain {
+impl Block for PlainBlock {
     fn encrypt(&self, _data: &mut Vec<u8>) -> crate::Result<()> {
         Ok(())
     }

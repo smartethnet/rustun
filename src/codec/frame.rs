@@ -41,6 +41,7 @@ impl Display for Frame {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HandshakeFrame {
+    pub key: String,
     pub private_ip: String,
     pub ciders: Vec<String>,
 }

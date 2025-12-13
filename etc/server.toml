@@ -1,0 +1,5 @@
+[server_config]
+listen_addr = "0.0.0.0:8080"
+
+[crypto_config]
+xor="rustun"

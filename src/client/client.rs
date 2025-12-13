@@ -15,6 +15,7 @@ pub struct ClientConfig {
     pub keepalive_interval: Duration,
     pub outbound_buffer_size: usize,
     pub keep_alive_thresh: u8,
+    pub key: String,
 }
 
 pub struct Client {
@@ -47,6 +48,7 @@ impl Client {
 
         // send handshake
         conn.write_frame(Frame::Handshake(HandshakeFrame{
+            key: self.cfg.key.clone(),
             private_ip: self.cfg.private_ip.clone(),
             ciders: self.cfg.cidr.clone(),
         })).await?;

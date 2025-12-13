@@ -25,7 +25,7 @@ replace x86_64-unknown-linux-gnu wiht your target arch.
 2. run
 
 ```shell
-./server
+./server etc/server.toml
 ```
 
 it will listen `0.0.0.0:8080`
@@ -33,18 +33,44 @@ it will listen `0.0.0.0:8080`
 client1: 
 
 ```shell
-./client 127.0.0.1:8080 10.0.0.101
+➜  rustun git:(main) ✗ cat etc/client.toml 
+[client_config]
+server_addr = "127.0.0.1:8080"
+key = "client-key1"
+
+[device_config]
+private_ip = "10.0.0.101"
+mask = "255.255.255.0"
+gateway="10.0.0.1"
+
+[crypto_config]
+xor="rustun"% 
+
+./client etc/client.toml
 ```
 
-it will connect server(127.0.0.1:8080)， and set the private ip to 10.0.0.101
+it will connect server(127.0.0.1:8080)， and set the private ip to **10.0.0.101**
 
 client2:
 
 ```shell
-./client 127.0.0.1:8080 10.0.0.102
+➜  rustun git:(main) ✗ cat etc/client.toml
+[client_config]
+server_addr = "127.0.0.1:8080"
+key = "client-key2"
+
+[device_config]
+private_ip = "10.0.0.102"
+mask = "255.255.255.0"
+gateway="10.0.0.1"
+
+[crypto_config]
+xor="rustun"%       
+
+./client etc/client.toml
 ```
 
-it will connect server(127.0.0.1:8080)， and set the private ip to 10.0.0.102
+it will connect server(127.0.0.1:8080)， and set the private ip to **10.0.0.102**
 
 3. test
 

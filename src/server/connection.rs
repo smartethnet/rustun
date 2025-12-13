@@ -15,28 +15,27 @@ const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct ConnectionMeta {
+    pub key: String,
     pub private_ip: String,
-    #[allow(unused)]
     pub ciders: Vec<String>,
     pub(crate) outbound_tx: mpsc::Sender<Frame>,
 }
 
 impl PartialEq<ConnectionMeta> for &ConnectionMeta {
     fn eq(&self, other: &ConnectionMeta) -> bool {
-        self.private_ip == other.private_ip
+        self.key == other.key
     }
 }
 
 impl ConnectionMeta {
     pub fn match_dst(&self, dst: String) -> bool {
         self.private_ip == dst
-        // TODO: route by cidr
     }
 }
 
 impl Display for ConnectionMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.private_ip)
+        write!(f, "private ip {}", self.private_ip)
     }
 }
 

@@ -1,5 +1,6 @@
 use std::fs;
 use serde::{Deserialize, Serialize};
+use crate::crypto::CryptoConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -28,6 +29,8 @@ pub struct ClientConfig {
     // heartbeat interval
     #[serde(default = "default_keep_alive_interval")]
     pub keep_alive_interval: u64,
+
+    pub key: String,
 }
 
 fn default_server_protocol() -> String {
@@ -68,18 +71,11 @@ pub struct DeviceConfig {
     // mtu, 1500 - ip_overhead - tcp_overhead - rustun_overhead
     #[serde(default = "default_mtu")]
     pub mtu: u16,
+
 }
 
 fn default_mtu() -> u16 {
     1430
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CryptoConfig {
-    Aes256(String),
-    Plain,
-    Xor(String),
 }
 
 pub fn load(path: &str) -> anyhow::Result<Config> {

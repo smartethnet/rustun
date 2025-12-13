@@ -1,9 +1,7 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit, OsRng, rand_core::RngCore},
     Aes256Gcm, Nonce,
 };
-use rand::RngCore;
-
 use super::Block;
 
 pub struct Aes256Block {
