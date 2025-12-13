@@ -32,7 +32,7 @@ pub async fn run_client() {
     let mut handler = ClientHandler::new(ClientConfig{
         server_addr: server_addr.clone(),
         private_ip: private_ip.clone(),
-        cidr: config.device_config.routes,
+        cidr: config.device_config.routes_to_me,
         keepalive_interval: Duration::from_secs(config.client_config.keep_alive_interval),
         outbound_buffer_size: 1000,
         keep_alive_thresh: config.client_config.keep_alive_thresh,

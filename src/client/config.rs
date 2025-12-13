@@ -66,7 +66,7 @@ pub struct DeviceConfig {
     // local routes cidr, server will route these ciders here
     // considering config in server side
     #[serde(default)]
-    pub routes: Vec<String>,
+    pub routes_to_me: Vec<String>,
 
     // mtu, 1500 - ip_overhead - tcp_overhead - rustun_overhead
     #[serde(default = "default_mtu")]

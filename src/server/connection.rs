@@ -9,6 +9,8 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use std::net::IpAddr;
+use ipnet::IpNet;
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -29,7 +31,24 @@ impl PartialEq<ConnectionMeta> for &ConnectionMeta {
 
 impl ConnectionMeta {
     pub fn match_dst(&self, dst: String) -> bool {
-        self.private_ip == dst
+        if self.private_ip == dst {
+            return true;
+        }
+
+        let dst_ip = match dst.parse::<IpAddr>() {
+            Ok(ip) => ip,
+            Err(_) => return false, 
+        };
+
+        for cidr in &self.ciders {
+            if let Ok(network) = cidr.parse::<IpNet>() {
+                if network.contains(&dst_ip) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 }
 

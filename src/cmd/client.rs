@@ -2,5 +2,6 @@ use rustun::client::runner;
 
 #[tokio::main]
 async fn main() {
-    let _ = runner::run_client();
+    let err = runner::run_client().await;
+    panic!("{:?}", err);
 }

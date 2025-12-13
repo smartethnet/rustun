@@ -822,6 +822,7 @@ dependencies = [
  "base64",
  "bytes",
  "ed25519-dalek",
+ "ipnet",
  "rand",
  "serde",
  "serde_json",
