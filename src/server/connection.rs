@@ -65,13 +65,14 @@ impl TcpConnection {
 
 impl TcpConnection {
     fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
-        let result = Parser::unmarshal(self.input_stream.as_ref());
+        let result = Parser::unmarshal(self.input_stream.as_ref(), self.block.as_ref());
         match result {
             Ok((frame, total_len)) => {
                 self.input_stream.advance(total_len);
                 Ok(Some(frame))
             },
             Err(e) => {
+
                 Err(e.into())
             }
         }
@@ -103,7 +104,7 @@ impl Connection for TcpConnection {
 
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()> {
         // TODO: encrypt
-        let result = Parser::marshal(frame);
+        let result = Parser::marshal(frame, self.block.as_ref());
         let buf = match result {
             Ok(buf) => buf,
             Err(e) => {

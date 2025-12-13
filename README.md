@@ -36,7 +36,7 @@ client1:
 ./client 127.0.0.1:8080 10.0.0.101
 ```
 
-it will connect server, (127.0.0.1:8080) and set the private ip to 10.0.0.101
+it will connect server(127.0.0.1:8080)， and set the private ip to 10.0.0.101
 
 client2:
 
@@ -44,7 +44,7 @@ client2:
 ./client 127.0.0.1:8080 10.0.0.102
 ```
 
-it will connect server, (127.0.0.1:8080) and set the private ip to 10.0.0.101
+it will connect server(127.0.0.1:8080)， and set the private ip to 10.0.0.102
 
 3. test
 
@@ -53,4 +53,5 @@ client1 ping client2
 10.0.0.101 ping 10.0.0.102
 
 > **note**
+> 
 > client1 and client2 DONT run in the same machine

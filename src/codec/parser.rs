@@ -1,9 +1,11 @@
-use anyhow::Context;
 use crate::codec::frame::*;
+use crate::crypto::Block;
+use anyhow::Context;
+
 pub struct Parser;
 
 impl Parser {
-    pub fn unmarshal(buf: &[u8]) -> crate::Result<(Frame, usize)> {
+    pub fn unmarshal(buf: &[u8], block: &Box<dyn Block>) -> crate::Result<(Frame, usize)> {
         if buf.len() < HDR_LEN {
             return Err(FrameError::TooShort.into());
         }
@@ -18,11 +20,13 @@ impl Parser {
         }
 
         let total_len = HDR_LEN + payload_size as usize;
-        let payload = &buf[HDR_LEN..total_len];
+        let payload = &mut buf[HDR_LEN..total_len].to_vec();
+
 
         let frame_type = FrameType::try_from(cmd)?;
         match frame_type {
             FrameType::Handshake => {
+                block.decrypt(payload).map_err(FrameError::DecryptionFailed)?;
                 let hs: HandshakeFrame = serde_json::from_slice(payload)
                     .map_err(|_| FrameError::Invalid)?;
                 Ok((Frame::Handshake(hs), total_len))
@@ -33,6 +37,7 @@ impl Parser {
             }
 
             FrameType::Data => {
+                block.decrypt(payload).map_err(FrameError::DecryptionFailed)?;
                 Ok((Frame::Data(DataFrame { payload: payload.to_vec() }), total_len))
             }
         }
@@ -53,10 +58,15 @@ impl Parser {
         true
     }
 
-    pub fn marshal(frame: Frame) -> crate::Result<Vec<u8>> {
+    pub fn marshal(frame: Frame, block: &Box<dyn Block>) -> crate::Result<Vec<u8>> {
         match frame {
             Frame::Handshake(hs) => {
                 let payload = serde_json::to_string(&hs).with_context(|| "failed to marshal handshake")?;
+                let mut payload = payload.as_bytes().to_vec();
+                if let Err(e) =  block.encrypt(&mut payload) {
+                    return Err(e.into());
+                };
+
                 let mut buf = Vec::with_capacity(HDR_LEN);
                 // magic: 0x91929394
                 buf.extend_from_slice(&0x91929394u32.to_be_bytes());
@@ -68,7 +78,7 @@ impl Parser {
                 let payload_length = payload.len() as u16;
                 buf.extend_from_slice(&(payload_length.to_be_bytes()));
                 // payload
-                buf.extend_from_slice(payload.as_bytes());
+                buf.extend_from_slice(&payload);
                 Ok(buf)
             }
             Frame::KeepAlive(_kf) => {
@@ -83,7 +93,12 @@ impl Parser {
                 buf.extend_from_slice(&0u16.to_be_bytes());
                 Ok(buf)
             }
-            Frame::Data(data) => {
+            Frame::Data(mut data) => {
+                let payload = data.payload.as_mut();
+                if let Err(e) = block.encrypt(payload) {
+                    return Err(e.into());
+                };
+
                 let mut buf = Vec::with_capacity(HDR_LEN);
                 // magic: 0x91929394
                 buf.extend_from_slice(&0x91929394u32.to_be_bytes());
@@ -92,9 +107,9 @@ impl Parser {
                 // cmd: data = 2
                 buf.push(FrameType::Data as u8);
                 // payload_size: 0
-                let payload_length = data.payload.len() as u16;
+                let payload_length = payload.len() as u16;
                 buf.extend_from_slice(&payload_length.to_be_bytes());
-                buf.extend_from_slice(&data.payload);
+                buf.extend_from_slice(&payload);
                 Ok(buf)
             }
         }

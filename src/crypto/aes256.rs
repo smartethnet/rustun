@@ -37,7 +37,7 @@ impl Aes256Block {
 }
 
 impl Block for Aes256Block {
-    fn encrypt(&mut self, data: &mut Vec<u8>) -> crate::Result<()> {
+    fn encrypt(&self, data: &mut Vec<u8>) -> crate::Result<()> {
         let nonce_bytes = Self::generate_nonce();
         let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -52,7 +52,7 @@ impl Block for Aes256Block {
         Ok(())
     }
 
-    fn decrypt(&mut self, data: &mut Vec<u8>) -> crate::Result<()> {
+    fn decrypt(&self, data: &mut Vec<u8>) -> crate::Result<()> {
         if data.len() < 28 {
             return Err("Data too short for decryption".into());
         }

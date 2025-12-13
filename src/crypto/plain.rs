@@ -1,4 +1,5 @@
 use crate::crypto::Block;
+use bytes::BytesMut;
 
 pub struct Plain {}
 
@@ -9,11 +10,11 @@ impl Plain {
 }
 
 impl Block for Plain {
-    fn encrypt(&mut self, _data: &mut Vec<u8>) -> crate::Result<()> {
+    fn encrypt(&self, _data: &mut Vec<u8>) -> crate::Result<()> {
         Ok(())
     }
 
-    fn decrypt(&mut self, _data: &mut Vec<u8>) -> crate::Result<()> {
+    fn decrypt(&self, _data: &mut Vec<u8>) -> crate::Result<()> {
         Ok(())
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
+use rustun::crypto::aes256::Aes256Block;
 use rustun::crypto::plain::Plain;
 use rustun::server::server::Server;
 
@@ -24,7 +25,7 @@ async fn main() {
     
     tracing::info!("Starting server on: {}", addr);
     
-    let mut server = Server::new(addr, Arc::new(Box::new(Plain::new())));
+    let mut server = Server::new(addr, Arc::new(Box::new(Aes256Block::from_string("rustun"))));
     if let Err(e) = server.listen_and_serve().await {
         tracing::error!("Server error: {}", e);
         std::process::exit(1);

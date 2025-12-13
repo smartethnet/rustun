@@ -5,6 +5,7 @@ use tracing_subscriber::EnvFilter;
 use rustun::client::client::{ClientConfig, ClientHandler};
 use rustun::client::device::{ DeviceConfig, DeviceHandler};
 use rustun::codec::frame::{DataFrame, Frame};
+use rustun::crypto::aes256::Aes256Block;
 use rustun::crypto::plain;
 
 #[tokio::main]
@@ -36,7 +37,7 @@ async fn main() {
         keepalive_interval: Duration::from_secs(3),
         outbound_buffer_size: 1000,
         keep_alive_thresh: 5,
-    },Arc::new(Box::new(plain::Plain::new())));
+    },Arc::new(Box::new(Aes256Block::from_string("rustun"))));
     handler.run_client();
 
     // initialize device handler
@@ -74,7 +75,9 @@ async fn main() {
                         match frame {
                             Frame::Data(frame) => {
                                 tracing::info!("receive {} bytes from server", frame.payload.len());
-                                dev.send(frame.payload).await.expect("TODO: panic message");
+                                if let Err(e) = dev.send(frame.payload).await {
+                                    tracing::error!("write device fail {}", e);
+                                }
                             }
                             _ => {}
                         }
