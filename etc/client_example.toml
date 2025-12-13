@@ -1,0 +1,23 @@
+[client_config]
+server_protocol = "tcp"
+server_addr = "production.vpn.company.com:443"
+connect_timeout_secs = 15        
+keep_alive_thresh = 3             
+keep_alive_interval = 5
+
+[device_config]
+private_ip = "10.0.0.201"
+mask = "255.255.255.0"
+gateway="10.0.0.1"
+routes = [
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "10.0.0.0/8"
+]
+mtu = 1400
+
+[crypto_config]
+# aes256 = "production_key_change_me_please!"
+xor = "production_key_change_me_please!"
+
+#crypto_config="plain"

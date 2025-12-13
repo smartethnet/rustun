@@ -7,7 +7,7 @@ pub struct DeviceConfig {
     pub ip: String,
     pub mask: String,
     pub gateway: String,
-    pub mtu: usize,
+    pub mtu: u16,
     pub routes: Vec<String>,
 }
 

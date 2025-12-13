@@ -5,11 +5,14 @@ use tracing_subscriber::EnvFilter;
 use rustun::client::client::{ClientConfig, ClientHandler};
 use rustun::client::device::{ DeviceConfig, DeviceHandler};
 use rustun::codec::frame::{DataFrame, Frame};
-use rustun::crypto::aes256::Aes256Block;
-use rustun::crypto::plain;
+use rustun::crypto::xor::XorBlock;
+use rustun::client::config;
 
 #[tokio::main]
 async fn main() {
+    let args = std::env::args().collect::<Vec<String>>();
+    let config = config::load(args.get(1).unwrap_or(&"client.toml".to_string())).unwrap();
+
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
             .with_env_filter(
@@ -22,32 +25,29 @@ async fn main() {
             .finish(),
     ).unwrap();
 
-    let server_addr = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "192.168.1.8:8080".to_string());
-    let local_addr = std::env::args().nth(2).unwrap_or_else(|| "10.0.0.100".to_string());
-
+    let server_addr = config.client_config.server_addr;
+    let private_ip = config.device_config.private_ip;
     tracing::info!("Starting client, connecting to: {}", server_addr);
 
     // initialize client handler
     let mut handler = ClientHandler::new(ClientConfig{
         server_addr: server_addr.clone(),
-        private_ip: local_addr.clone(),
-        cidr: vec![],
-        keepalive_interval: Duration::from_secs(3),
+        private_ip: private_ip.clone(),
+        cidr: config.device_config.routes,
+        keepalive_interval: Duration::from_secs(config.client_config.keep_alive_interval),
         outbound_buffer_size: 1000,
-        keep_alive_thresh: 5,
-    },Arc::new(Box::new(Aes256Block::from_string("rustun"))));
+        keep_alive_thresh: config.client_config.keep_alive_thresh,
+    },Arc::new(Box::new(XorBlock::from_string("rustun"))));
     handler.run_client();
 
     // initialize device handler
     let mut dev = DeviceHandler::new();
     match dev.run(DeviceConfig {
         name: "tun.0".to_string(),
-        ip: local_addr.clone(),
-        mask: "255.255.255.0".to_string(),
-        gateway: "10.0.0.1".to_string(),
-        mtu: 1430,
+        ip: private_ip.clone(),
+        mask: config.device_config.mask,
+        gateway: config.device_config.gateway,
+        mtu: config.device_config.mtu,
         routes: vec![],
     }) {
         Ok(_) => {}

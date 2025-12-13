@@ -14,7 +14,7 @@ pub struct ClientConfig {
     pub cidr: Vec<String>,
     pub keepalive_interval: Duration,
     pub outbound_buffer_size: usize,
-    pub keep_alive_thresh: usize,
+    pub keep_alive_thresh: u8,
 }
 
 pub struct Client {
@@ -52,7 +52,7 @@ impl Client {
         })).await?;
 
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
-        let mut keepalive_wait: usize = 0;
+        let mut keepalive_wait: u8 = 0;
         loop {
             tokio::select! {
                 _ = keepalive_ticker.tick() => {

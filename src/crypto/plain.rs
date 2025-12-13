@@ -1,5 +1,4 @@
 use crate::crypto::Block;
-use bytes::BytesMut;
 
 pub struct Plain {}
 
