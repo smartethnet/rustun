@@ -19,7 +19,7 @@ impl ConnectionManager {
 
     pub fn del_connection(&self, key: String) {
         self.connections.write().unwrap().retain(|route| {
-            route.key != key
+            route.identity != key
         })
     }
 
@@ -28,6 +28,10 @@ impl ConnectionManager {
         guard.iter()
             .find(|client| client.match_dst(dst.clone()))
             .cloned()
+    }
+
+    pub fn get_connections(&self) -> Vec<ConnectionMeta> {
+        self.connections.read().unwrap().clone()
     }
 
     #[allow(dead_code)]

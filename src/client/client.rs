@@ -3,6 +3,7 @@ use std::time::Instant;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
+use crate::client::sys_route::SysRoute;
 use crate::codec::frame::{Frame, HandshakeFrame, KeepAliveFrame};
 use crate::crypto::Block;
 use crate::server::connection::{Connection, TcpConnection};
@@ -23,6 +24,7 @@ pub struct Client {
     outbound_rx: mpsc::Receiver<Frame>,
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
+    sys_route: SysRoute,
 }
 
 impl Client {
@@ -30,7 +32,7 @@ impl Client {
                outbound_rx: mpsc::Receiver<Frame>,
                inbound_tx: mpsc::Sender<Frame>,
                block: Arc<Box<dyn Block>>) -> Self {
-        Self { cfg, outbound_rx, inbound_tx, block }
+        Self { cfg, outbound_rx, inbound_tx, block, sys_route: SysRoute::new() }
     }
 
     pub async fn run_loop(&mut self)  {
@@ -46,12 +48,9 @@ impl Client {
         let mut conn = TcpConnection::new(socket, self.block.clone());
         tracing::info!("Connected to server {}", self.cfg.server_addr);
 
-        // send handshake
-        conn.write_frame(Frame::Handshake(HandshakeFrame{
-            key: self.cfg.key.clone(),
-            private_ip: self.cfg.private_ip.clone(),
-            ciders: self.cfg.cidr.clone(),
-        })).await?;
+        if let Err(e) = self.handshake(&mut conn).await {
+            return Err(e);
+        }
 
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
         let mut keepalive_wait: u8 = 0;
@@ -119,6 +118,29 @@ impl Client {
 
         tracing::info!("client disconnected");
         let _ = conn.close().await;
+        Ok(())
+    }
+
+    async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<()> {
+        // send handshake
+        conn.write_frame(Frame::Handshake(HandshakeFrame{
+            key: self.cfg.key.clone(),
+            private_ip: self.cfg.private_ip.clone(),
+            ciders: self.cfg.cidr.clone(),
+        })).await?;
+
+        // recv handshake
+        let frame = conn.read_frame().await?;
+        if let Frame::HandshakeReply(frame) = frame {
+            tracing::info!("received handshake frame: {:?}", frame);
+            // add sys route
+            for route_item in frame.others {
+                if let Err(e) = self.sys_route.add(route_item.ciders,
+                                                   route_item.private_ip) {
+                    return Err(e.into());
+                }
+            }
+        }
         Ok(())
     }
 }

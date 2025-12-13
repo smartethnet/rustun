@@ -4,7 +4,8 @@ use tokio::net::{TcpStream};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use crate::codec::frame::{Frame, HandshakeFrame};
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
+use crate::codec::frame::Frame::HandshakeReply;
 use crate::crypto::Block;
 use crate::server::connection_manager::{ConnectionManager};
 use crate::server::connection::{Connection, ConnectionMeta, TcpConnection};
@@ -110,8 +111,25 @@ impl Handler {
             Err(e) => return Err(e),
         };
 
+        // TODO: validate handshake and check conflict
+
+        // reply handshake with other clients info
+        let others = self.connection_manager.get_connections();
+        let route_items: Vec<RouteItem> = others.iter().map(|conn| {
+            RouteItem {
+                identity: conn.identity.clone(),
+                private_ip: conn.private_ip.clone(),
+                ciders: conn.ciders.clone(),
+            }
+        }).collect();
+        
+        self.conn.write_frame(HandshakeReply(HandshakeReplyFrame{
+            others: route_items,
+        })).await?;
+
+
         let meta = ConnectionMeta {
-            key: hs.key.clone(),
+            identity: hs.key.clone(),
             private_ip: hs.private_ip.clone(),
             ciders: hs.ciders.clone(),
             outbound_tx: self.outbound_tx.clone(),

@@ -17,7 +17,7 @@ const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct ConnectionMeta {
-    pub key: String,
+    pub identity: String,
     pub private_ip: String,
     pub ciders: Vec<String>,
     pub(crate) outbound_tx: mpsc::Sender<Frame>,
@@ -25,7 +25,7 @@ pub struct ConnectionMeta {
 
 impl PartialEq<ConnectionMeta> for &ConnectionMeta {
     fn eq(&self, other: &ConnectionMeta) -> bool {
-        self.key == other.key
+        self.identity == other.identity
     }
 }
 

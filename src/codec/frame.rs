@@ -6,6 +6,7 @@ pub(crate) enum FrameType {
     Handshake = 1,
     KeepAlive = 2,
     Data = 3,
+    HandshakeReply = 4,
 }
 
 impl TryFrom<u8> for FrameType {
@@ -15,6 +16,7 @@ impl TryFrom<u8> for FrameType {
             0x01 => Ok(FrameType::Handshake),
             0x02 => Ok(FrameType::KeepAlive),
             0x03 => Ok(FrameType::Data),
+            0x04 => Ok(FrameType::HandshakeReply),
             _ => Err(FrameError::Invalid),
         }
     }
@@ -25,6 +27,7 @@ pub(crate) const HDR_LEN: usize = 8;
 #[derive(Debug)]
 pub enum Frame {
     Handshake(HandshakeFrame),
+    HandshakeReply(HandshakeReplyFrame),
     KeepAlive(KeepAliveFrame),
     Data(DataFrame),
 }
@@ -33,6 +36,7 @@ impl Display for Frame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Frame::Handshake(frame) => write!(f, "handshake with {}", frame.private_ip),
+            Frame::HandshakeReply(frame) => write!(f, "handshake reply with {} others", frame.others.len()),
             Frame::KeepAlive(_frame) => write!(f, "keepalive"),
             Frame::Data(frame) => write!(f, "data with payload size {}", frame.payload.len()),
         }
@@ -42,6 +46,18 @@ impl Display for Frame {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HandshakeFrame {
     pub key: String,
+    pub private_ip: String,
+    pub ciders: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HandshakeReplyFrame {
+    pub others: Vec<RouteItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RouteItem {
+    pub identity: String,
     pub private_ip: String,
     pub ciders: Vec<String>,
 }

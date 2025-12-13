@@ -3,12 +3,9 @@ server_addr = "192.168.1.8:8080"
 key = "client-key1"
 
 [device_config]
-private_ip = "10.0.0.102"
+private_ip = "10.0.0.101"
 mask = "255.255.255.0"
 gateway="10.0.0.1"
-routes_to_me=[
-    "192.168.1.201/32"
-]
 
 [crypto_config]
 xor="rustun"

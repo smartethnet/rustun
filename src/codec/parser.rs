@@ -32,6 +32,13 @@ impl Parser {
                 Ok((Frame::Handshake(hs), total_len))
             }
 
+            FrameType::HandshakeReply => {
+                block.decrypt(payload).map_err(FrameError::DecryptionFailed)?;
+                let reply: HandshakeReplyFrame = serde_json::from_slice(payload)
+                    .map_err(|_| FrameError::Invalid)?;
+                Ok((Frame::HandshakeReply(reply), total_len))
+            }
+
             FrameType::KeepAlive => {
                 Ok((Frame::KeepAlive(KeepAliveFrame {}), total_len))
             }
@@ -74,6 +81,27 @@ impl Parser {
                 buf.push(0x01);
                 // cmd
                 buf.push(FrameType::Handshake as u8);
+                // payload_size
+                let payload_length = payload.len() as u16;
+                buf.extend_from_slice(&(payload_length.to_be_bytes()));
+                // payload
+                buf.extend_from_slice(&payload);
+                Ok(buf)
+            }
+            Frame::HandshakeReply(reply) => {
+                let payload = serde_json::to_string(&reply).with_context(|| "failed to marshal handshake reply")?;
+                let mut payload = payload.as_bytes().to_vec();
+                if let Err(e) = block.encrypt(&mut payload) {
+                    return Err(e.into());
+                };
+
+                let mut buf = Vec::with_capacity(HDR_LEN);
+                // magic: 0x91929394
+                buf.extend_from_slice(&0x91929394u32.to_be_bytes());
+                // version: 0x01
+                buf.push(0x01);
+                // cmd
+                buf.push(FrameType::HandshakeReply as u8);
                 // payload_size
                 let payload_length = payload.len() as u16;
                 buf.extend_from_slice(&(payload_length.to_be_bytes()));
