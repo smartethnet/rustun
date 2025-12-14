@@ -7,24 +7,29 @@ use tokio::sync::mpsc;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
 use crate::codec::frame::Frame::HandshakeReply;
 use crate::crypto::Block;
+use crate::server::Connection;
 use crate::server::connection_manager::{ConnectionManager};
-use crate::server::connection::{Connection, ConnectionMeta, TcpConnection};
+use crate::server::connection::{ConnectionMeta, TcpConnection};
+use crate::server::client_manager::ClientManager;
 
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
 
 pub struct Server {
     addr: String,
     connection_manager: Arc<ConnectionManager>,
+    client_manager: Arc<ClientManager>,
     listener: Option<TcpListener>,
     block: Arc<Box<dyn Block>>,
 }
 
 impl Server {
     pub fn new(addr: String,
+               client_manager: Arc<ClientManager>,
                block: Arc<Box<dyn Block>>) -> Self {
         Server {
             addr,
             connection_manager: Arc::new(ConnectionManager::new()),
+            client_manager,
             listener: None,
             block,
         }
@@ -75,6 +80,7 @@ impl Server {
         tracing::info!("new connection from {}", socket.peer_addr().unwrap());
 
         let mut handler = Handler::new(self.connection_manager.clone(),
+                                       self.client_manager.clone(),
                                        socket, self.block.clone());
         tokio::task::spawn(async move {
             let e = handler.run().await;
@@ -85,6 +91,7 @@ impl Server {
 
 pub struct Handler {
     connection_manager: Arc<ConnectionManager>,
+    client_manager: Arc<ClientManager>,
     conn: Box<dyn Connection>,
     outbound_tx: mpsc::Sender<Frame>,
     outbound_rx: mpsc::Receiver<Frame>,
@@ -92,12 +99,14 @@ pub struct Handler {
 
 impl Handler {
     pub fn new(connection_manager: Arc<ConnectionManager>,
+               client_manager: Arc<ClientManager>,
                tcp_stream: TcpStream,
                block: Arc<Box<dyn Block>>) -> Handler {
         let (tx, rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
         let conn = TcpConnection::new(tcp_stream, block);
         Self{
             connection_manager,
+            client_manager,
             conn: Box::new(conn),
             outbound_rx: rx,
             outbound_tx: tx,
@@ -111,31 +120,34 @@ impl Handler {
             Err(e) => return Err(e),
         };
 
-        // TODO: validate handshake and check conflict
+        // validate client identity
+        let client_config = match self.client_manager.get_client(&hs.identity) {
+            Some(c) => c,
+            None => {
+                tracing::info!("{} unauthorized", hs.identity);
+                return Ok(());
+            }
+        };
 
         // reply handshake with other clients info
-        let others = self.connection_manager.get_connections();
-        let route_items: Vec<RouteItem> = others.iter().map(|conn| {
+        let others = self.client_manager.get_clients_exclude(&hs.identity);
+        let route_items: Vec<RouteItem> = others.iter().map(|client| {
             RouteItem {
-                identity: conn.identity.clone(),
-                private_ip: conn.private_ip.clone(),
-                ciders: conn.ciders.clone(),
+                identity: client.identity.clone(),
+                private_ip: client.private_ip.clone(),
+                ciders: client.ciders.clone(),
             }
         }).collect();
-        
+
         self.conn.write_frame(HandshakeReply(HandshakeReplyFrame{
             others: route_items,
         })).await?;
 
-
         let meta = ConnectionMeta {
-            identity: hs.key.clone(),
-            private_ip: hs.private_ip.clone(),
-            ciders: hs.ciders.clone(),
+            client_config: client_config.clone(),
             outbound_tx: self.outbound_tx.clone(),
         };
         tracing::debug!("handshake completed with {:?}", meta);
-
         self.connection_manager.add_connection(meta);
 
         loop {
@@ -148,7 +160,7 @@ impl Handler {
                             self.handle_frame(frame).await;
                         }
                         Err(e) => {
-                            tracing::error!("read {} failed: {:?}", hs.key, e);
+                            tracing::error!("read {} failed: {:?}", hs.identity, e);
                             break;
                         }
                     }
@@ -167,8 +179,8 @@ impl Handler {
             }
         }
 
-        tracing::info!("delete client {}", hs.key);
-        self.connection_manager.del_connection(hs.key);
+        tracing::info!("delete client {}", hs.identity);
+        self.connection_manager.del_connection(hs.identity);
         Ok(())
     }
 

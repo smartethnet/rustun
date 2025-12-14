@@ -11,27 +11,27 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use std::net::IpAddr;
 use ipnet::IpNet;
+use crate::server::client_manager::ClientConfig;
+pub(crate) use crate::server::Connection;
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct ConnectionMeta {
-    pub identity: String,
-    pub private_ip: String,
-    pub ciders: Vec<String>,
+    pub client_config: ClientConfig,
     pub(crate) outbound_tx: mpsc::Sender<Frame>,
 }
 
 impl PartialEq<ConnectionMeta> for &ConnectionMeta {
     fn eq(&self, other: &ConnectionMeta) -> bool {
-        self.identity == other.identity
+        self.client_config.identity == other.client_config.identity
     }
 }
 
 impl ConnectionMeta {
     pub fn match_dst(&self, dst: String) -> bool {
-        if self.private_ip == dst {
+        if self.client_config.private_ip == dst {
             return true;
         }
 
@@ -40,7 +40,7 @@ impl ConnectionMeta {
             Err(_) => return false, 
         };
 
-        for cidr in &self.ciders {
+        for cidr in &self.client_config.ciders {
             if let Ok(network) = cidr.parse::<IpNet>() {
                 if network.contains(&dst_ip) {
                     return true;
@@ -54,7 +54,7 @@ impl ConnectionMeta {
 
 impl Display for ConnectionMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "private ip {}", self.private_ip)
+        write!(f, "{} {}", self.client_config.identity, self.client_config.private_ip)
     }
 }
 
@@ -143,11 +143,4 @@ impl Connection for TcpConnection {
     async fn close(&mut self)  {
         let _ = self.socket.shutdown().await;
     }
-}
-
-#[async_trait]
-pub trait Connection: Send + Sync {
-    async fn read_frame(&mut self) -> crate::Result<Frame>;
-    async fn write_frame(&mut self, frame: Frame) -> crate::Result<()>;
-    async fn close(&mut self);
 }

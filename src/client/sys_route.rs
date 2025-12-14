@@ -13,10 +13,8 @@ impl SysRoute {
     pub fn add(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
         for dst in dsts {
             if let Err(e) = self.add_route(&dst, &gateway) {
-                tracing::error!("Failed to add route {} via {}: {:?}", dst, gateway, e);
                 return Err(e);
             }
-            tracing::info!("Added route: {} via {}", dst, gateway);
         }
         Ok(())
     }
@@ -27,10 +25,7 @@ impl SysRoute {
     pub fn del(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
         for dst in dsts {
             if let Err(e) = self.del_route(&dst, &gateway) {
-                tracing::error!("Failed to delete route {} via {}: {:?}", dst, gateway, e);
-                // Continue to delete other routes even if one fails
-            } else {
-                tracing::info!("Deleted route: {} via {}", dst, gateway);
+                return Err(e);
             }
         }
         Ok(())

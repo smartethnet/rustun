@@ -3,3 +3,13 @@ listen_addr = "0.0.0.0:8080"
 
 [crypto_config]
 xor="rustun"
+
+[[client_configs]]
+identity = "headquarters"
+private_ip = "10.0.0.2"
+ciders = ["192.168.1.0/24"]
+
+[[client_configs]]
+identity = "branch_a"
+private_ip = "10.0.0.3"
+ciders = ["192.168.10.0/24"]

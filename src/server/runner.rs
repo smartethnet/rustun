@@ -3,12 +3,12 @@ use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use crate::crypto;
 use crate::server::config;
+use crate::server::client_manager::ClientManager;
 use crate::server::server::Server;
 
 pub async fn run_server() {
     let args = std::env::args().collect::<Vec<String>>();
     let cfg = config::load(args.get(1).unwrap_or(&"server.toml".to_string())).unwrap();
-
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
             .with_env_filter(
@@ -21,11 +21,13 @@ pub async fn run_server() {
             .finish(),
     ).unwrap();
 
-    let addr = cfg.server_config.listen_addr;
-    tracing::info!("Starting server on: {}", addr);
+    tracing::info!("config: {:?}", cfg);
+    let client_manager = Arc::new(ClientManager::new());
+    client_manager.add_clients_config(cfg.client_configs);
 
+    let addr = cfg.server_config.listen_addr;
     let block = crypto::new_block(&cfg.crypto_config);
-    let mut server = Server::new(addr, Arc::new(block));
+    let mut server = Server::new(addr, client_manager, Arc::new(block));
 
     if let Err(e) = server.listen_and_serve().await {
         tracing::error!("Server error: {}", e);

@@ -18,8 +18,8 @@ impl ConnectionManager {
     }
 
     pub fn del_connection(&self, key: String) {
-        self.connections.write().unwrap().retain(|route| {
-            route.identity != key
+        self.connections.write().unwrap().retain(|conn| {
+            conn.client_config.identity != key
         })
     }
 
@@ -30,6 +30,8 @@ impl ConnectionManager {
             .cloned()
     }
 
+
+    #[allow(unused)]
     pub fn get_connections(&self) -> Vec<ConnectionMeta> {
         self.connections.read().unwrap().clone()
     }
@@ -37,8 +39,8 @@ impl ConnectionManager {
     #[allow(dead_code)]
     pub fn print_connections(&self) {
         let guard = self.connections.read().unwrap_or_else(|e| e.into_inner());
-        guard.iter().for_each(|route| {
-            tracing::info!("route: {:?}", route);
+        guard.iter().for_each(|conn| {
+            tracing::info!("route: {:?}", conn);
         })
     }
 }

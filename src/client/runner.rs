@@ -36,7 +36,7 @@ pub async fn run_client() {
         keepalive_interval: Duration::from_secs(config.client_config.keep_alive_interval),
         outbound_buffer_size: 1000,
         keep_alive_thresh: config.client_config.keep_alive_thresh,
-        key: config.client_config.key.clone(),
+        identity: config.client_config.identity.clone(),
     },Arc::new(Box::new(XorBlock::from_string("rustun"))));
     handler.run_client();
 

@@ -9,11 +9,6 @@ keep_alive_interval = 5
 private_ip = "10.0.0.201"
 mask = "255.255.255.0"
 gateway="10.0.0.1"
-routes = [
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-    "10.0.0.0/8"
-]
 mtu = 1400
 
 [crypto_config]

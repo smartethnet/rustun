@@ -30,7 +30,7 @@ pub struct ClientConfig {
     #[serde(default = "default_keep_alive_interval")]
     pub keep_alive_interval: u64,
 
-    pub key: String,
+    pub identity: String,
 }
 
 fn default_server_protocol() -> String {
@@ -72,10 +72,21 @@ pub struct DeviceConfig {
     #[serde(default = "default_mtu")]
     pub mtu: u16,
 
+    #[serde(default = "default_masquerade")]
+    pub masquerade: bool,
 }
 
 fn default_mtu() -> u16 {
     1430
+}
+
+fn default_masquerade() -> bool {
+    #[cfg(target_os = "linux")]
+    return true;
+    #[cfg(target_os = "windows")]
+    return false;
+    #[cfg(target_os = "macos")]
+    return false;
 }
 
 pub fn load(path: &str) -> anyhow::Result<Config> {

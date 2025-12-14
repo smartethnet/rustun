@@ -16,7 +16,7 @@ pub struct ClientConfig {
     pub keepalive_interval: Duration,
     pub outbound_buffer_size: usize,
     pub keep_alive_thresh: u8,
-    pub key: String,
+    pub identity: String,
 }
 
 pub struct Client {
@@ -123,12 +123,11 @@ impl Client {
 
     async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<()> {
         // send handshake
+        tracing::info!("handshake");
         conn.write_frame(Frame::Handshake(HandshakeFrame{
-            key: self.cfg.key.clone(),
-            private_ip: self.cfg.private_ip.clone(),
-            ciders: self.cfg.cidr.clone(),
+            identity: self.cfg.identity.clone(),
         })).await?;
-
+        tracing::info!("send to server");
         // recv handshake
         let frame = conn.read_frame().await?;
         if let Frame::HandshakeReply(frame) = frame {
@@ -136,8 +135,8 @@ impl Client {
             // add sys route
             for route_item in frame.others {
                 if let Err(e) = self.sys_route.add(route_item.ciders,
-                                                   route_item.private_ip) {
-                    return Err(e.into());
+                                                   self.cfg.private_ip.clone(),) {
+                    tracing::error!("Failed to add route item to route item: {}", e);
                 }
             }
         }

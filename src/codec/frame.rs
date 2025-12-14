@@ -35,7 +35,7 @@ pub enum Frame {
 impl Display for Frame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Frame::Handshake(frame) => write!(f, "handshake with {}", frame.private_ip),
+            Frame::Handshake(frame) => write!(f, "handshake with {}", frame.identity),
             Frame::HandshakeReply(frame) => write!(f, "handshake reply with {} others", frame.others.len()),
             Frame::KeepAlive(_frame) => write!(f, "keepalive"),
             Frame::Data(frame) => write!(f, "data with payload size {}", frame.payload.len()),
@@ -45,9 +45,7 @@ impl Display for Frame {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HandshakeFrame {
-    pub key: String,
-    pub private_ip: String,
-    pub ciders: Vec<String>,
+    pub identity: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
