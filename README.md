@@ -4,7 +4,7 @@ another rust version vpn tunnel.
 
 **status: developing**
 
-![](arch.png)
+![](./doc/arch.png)
 
 ## How to
 
@@ -20,9 +20,11 @@ or cross compile
 cross build --target x86_64-unknown-linux-gnu
 ```
 
-replace x86_64-unknown-linux-gnu wiht your target arch.
+replace x86_64-unknown-linux-gnu with your target arch.
 
 2. run
+
+server side:
 
 ```shell
 [server_config]
@@ -47,58 +49,59 @@ ciders = []
 it will:
 
 - listen `0.0.0.0:8080`
-- use xor crypto metho with key `rust_tun`
+- use xor crypto metho with key `rustun`
 - add two clients configurations
 
 client1: headquarters
 
 ```shell
-➜  rustun git:(main) ✗ cat etc/client.toml 
-[client_config]
-server_addr = "192.168.1.8:8080"
-identity = "headquarters"
-
-[device_config]
-private_ip = "10.0.0.2"
-mask = "255.255.255.0"
-gateway="10.0.0.1"
-
-[crypto_config]
-xor="rustun"
-
-./client etc/client.toml
+./client -s 192.168.1.8:8080 -i headquarters
 ```
 
 it will:
 
 - connect server(192.168.1.8:8080)
-- set the virtual private ip to **10.0.0.2**
 - use xor crypto with key `rustun`
-
 
 client2: branch_a
 
 ```shell
-➜  rustun git:(main) ✗ cat etc/client.toml
-[client_config]
-server_addr = "192.168.1.8:8080"
-identity = "branch_a"
-
-[device_config]
-private_ip = "10.0.0.3"
-mask = "255.0.0.0"
-gateway="10.0.0.1"
-
-[crypto_config]
-xor="rustun"    
-
-./client etc/client.toml
+./client -s 192.168.1.8:8080 -i branch_a
 ```
 
 it will:
 - connect server(192.168.1.8:8080)
-- set the virtual private ip to **10.0.0.3**
 - use xor crypto with key `rustun`
+
+client usage:
+
+```shell
+./client -h
+Rustun VPN Client
+
+Usage: client [OPTIONS] --server <SERVER> --identity <IDENTITY>
+
+Options:
+  -s, --server <SERVER>
+          Server address (e.g., 127.0.0.1:8080)
+  -i, --identity <IDENTITY>
+          Client identity/name
+  -c, --crypto <CRYPTO>
+          Encryption method: plain, aes256:<key>, or xor:<key> [default: xor:rustun]
+      --keepalive-interval <KEEPALIVE_INTERVAL>
+          Keep-alive interval in seconds [default: 10]
+      --keepalive-threshold <KEEPALIVE_THRESHOLD>
+          Keep-alive threshold (reconnect after this many failures) [default: 5]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+```
+
+most of the time you only need to set:
+
+- -s to set which server address to be connect.
+- -i client identity, configured in server configurations file, otherwise will be unauthorized.
 
 3. test
 

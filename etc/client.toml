@@ -1,6 +1,0 @@
-[client_config]
-server_addr = "192.168.1.8:8080"
-identity = "branch_a"
-
-[crypto_config]
-xor="rustun"

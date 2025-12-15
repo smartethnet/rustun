@@ -1,37 +1,69 @@
 use std::sync::Arc;
 use std::time::Duration;
+use clap::Parser;
 use tokio::sync::mpsc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
+
 use crate::client::client::{ClientConfig, ClientHandler};
-use crate::client::config;
 use crate::client::device::{DeviceConfig, DeviceHandler};
 use crate::client::sys_route::SysRoute;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
-use crate::crypto;
-use crate::crypto::{Block};
+use crate::crypto::{self, Block, CryptoConfig};
 
-const DEFAULT_CONFIG_PATH: &str = "client.toml";
 const DEFAULT_DEVICE_NAME: &str = "rustun";
 const DEFAULT_MTU: u16 = 1430;
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
 const CONFIG_CHANNEL_SIZE: usize = 10;
 
+/// Rustun VPN Client
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Server address (e.g., 127.0.0.1:8080)
+    #[arg(short, long)]
+    server: String,
+
+    /// Client identity/name
+    #[arg(short, long)]
+    identity: String,
+
+    /// Encryption method: plain, aes256:<key>, or xor:<key>
+    #[arg(short, long, default_value = "xor:rustun")]
+    crypto: String,
+
+    /// Keep-alive interval in seconds
+    #[arg(long, default_value = "10")]
+    keepalive_interval: u64,
+
+    /// Keep-alive threshold (reconnect after this many failures)
+    #[arg(long, default_value = "5")]
+    keepalive_threshold: u8,
+}
+
 pub async fn run_client() {
+    let args = Args::parse();
+
     if let Err(e) = init_tracing() {
         eprintln!("Failed to initialize logging: {}", e);
         return;
     }
 
-    let config = match load_config() {
+    tracing::info!("Starting Rustun VPN Client");
+    tracing::info!("  Server: {}", args.server);
+    tracing::info!("  Identity: {}", args.identity);
+    tracing::info!("  Crypto: {}", args.crypto);
+
+    // Parse crypto configuration
+    let crypto_config = match parse_crypto_config(&args.crypto) {
         Ok(cfg) => cfg,
         Err(e) => {
-            tracing::error!("Failed to load config: {}", e);
+            tracing::error!("Invalid crypto configuration: {}", e);
             return;
         }
     };
 
-    let mut handler = create_client_handler(&config);
+    let mut handler = create_client_handler(&args, &crypto_config);
     let (config_ready_tx, mut config_ready_rx) = mpsc::channel(CONFIG_CHANNEL_SIZE);
     handler.run_client(config_ready_tx);
 
@@ -45,7 +77,6 @@ pub async fn run_client() {
             return;
         }
     };
-    tracing::info!("Loaded device config: {:?}", device_config);
 
     let mut dev = match init_device(&device_config) {
         Ok(d) => d,
@@ -73,22 +104,37 @@ fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn load_config() -> anyhow::Result<config::Config> {
-    let args: Vec<String> = std::env::args().collect();
-    let config_path = args.get(1).map(|s| s.as_str()).unwrap_or(DEFAULT_CONFIG_PATH);
-    config::load(config_path)
+fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
+    let parts: Vec<&str> = crypto_str.splitn(2, ':').collect();
+    
+    match parts[0].to_lowercase().as_str() {
+        "plain" => Ok(CryptoConfig::Plain),
+        "aes256" => {
+            if parts.len() < 2 {
+                anyhow::bail!("AES256 requires a key: aes256:<key>");
+            }
+            Ok(CryptoConfig::Aes256(parts[1].to_string()))
+        }
+        "xor" => {
+            if parts.len() < 2 {
+                anyhow::bail!("XOR requires a key: xor:<key>");
+            }
+            Ok(CryptoConfig::Xor(parts[1].to_string()))
+        }
+        _ => anyhow::bail!("Unknown crypto method: {}. Use plain, aes256:<key>, or xor:<key>", parts[0]),
+    }
 }
 
-fn create_client_handler(config: &config::Config) -> ClientHandler {
+fn create_client_handler(args: &Args, crypto_config: &CryptoConfig) -> ClientHandler {
     let client_config = ClientConfig {
-        server_addr: config.client_config.server_addr.clone(),
-        keepalive_interval: Duration::from_secs(config.client_config.keep_alive_interval),
+        server_addr: args.server.clone(),
+        keepalive_interval: Duration::from_secs(args.keepalive_interval),
         outbound_buffer_size: OUTBOUND_BUFFER_SIZE,
-        keep_alive_thresh: config.client_config.keep_alive_thresh,
-        identity: config.client_config.identity.clone(),
+        keep_alive_thresh: args.keepalive_threshold,
+        identity: args.identity.clone(),
     };
 
-    let block = crypto::new_block(&config.crypto_config);
+    let block = crypto::new_block(crypto_config);
     let crypto_block: Arc<Box<dyn Block>> = Arc::new(block);
     ClientHandler::new(client_config, crypto_block)
 }
