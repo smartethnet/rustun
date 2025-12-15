@@ -5,7 +5,6 @@ use crate::crypto::CryptoConfig;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub client_config: ClientConfig,
-    pub device_config: DeviceConfig,
     pub crypto_config: CryptoConfig,
 }
 
@@ -47,46 +46,6 @@ fn default_keep_alive_thresh() -> u8 {
 
 fn default_keep_alive_interval() -> u64 {
     10
-}
-
-/// tunnel device configuration
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DeviceConfig {
-    // my vpn local ip
-    // considering config in server side
-    pub private_ip: String,
-
-    // mask
-    // considering config in server side
-    pub mask: String,
-
-    // gateway
-    pub gateway: String,
-
-    // local routes cidr, server will route these ciders here
-    // considering config in server side
-    #[serde(default)]
-    pub routes_to_me: Vec<String>,
-
-    // mtu, 1500 - ip_overhead - tcp_overhead - rustun_overhead
-    #[serde(default = "default_mtu")]
-    pub mtu: u16,
-
-    #[serde(default = "default_masquerade")]
-    pub masquerade: bool,
-}
-
-fn default_mtu() -> u16 {
-    1430
-}
-
-fn default_masquerade() -> bool {
-    #[cfg(target_os = "linux")]
-    return true;
-    #[cfg(target_os = "windows")]
-    return false;
-    #[cfg(target_os = "macos")]
-    return false;
 }
 
 pub fn load(path: &str) -> anyhow::Result<Config> {

@@ -140,6 +140,9 @@ impl Handler {
         }).collect();
 
         self.conn.write_frame(HandshakeReply(HandshakeReplyFrame{
+            private_ip: client_config.private_ip.clone(),
+            mask: client_config.mask.clone(),
+            gateway: client_config.gateway.clone(),
             others: route_items,
         })).await?;
 

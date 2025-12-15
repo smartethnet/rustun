@@ -50,6 +50,9 @@ pub struct HandshakeFrame {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HandshakeReplyFrame {
+    pub private_ip: String,
+    pub mask: String,
+    pub gateway: String,
     pub others: Vec<RouteItem>,
 }
 

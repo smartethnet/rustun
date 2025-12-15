@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::sync::{ Arc};
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use crate::client::client::{ClientConfig, ClientHandler};
@@ -25,29 +26,34 @@ pub async fn run_client() {
     ).unwrap();
 
     let server_addr = config.client_config.server_addr;
-    let private_ip = config.device_config.private_ip;
     tracing::info!("Starting client, connecting to: {}", server_addr);
 
     // initialize client handler
     let mut handler = ClientHandler::new(ClientConfig{
         server_addr: server_addr.clone(),
-        private_ip: private_ip.clone(),
-        cidr: config.device_config.routes_to_me,
         keepalive_interval: Duration::from_secs(config.client_config.keep_alive_interval),
         outbound_buffer_size: 1000,
         keep_alive_thresh: config.client_config.keep_alive_thresh,
         identity: config.client_config.identity.clone(),
     },Arc::new(Box::new(XorBlock::from_string("rustun"))));
-    handler.run_client();
+
+    let (config_ready_tx, mut config_ready_rx) = mpsc::channel(10);
+    handler.run_client(config_ready_tx);
+
+    let device_config = match config_ready_rx.recv().await {
+        Some(handshake_config) =>handshake_config,
+        None =>return,
+    };
+    tracing::info!("got config: {:?}", device_config);
 
     // initialize device handler
     let mut dev = DeviceHandler::new();
     match dev.run(DeviceConfig {
-        name: "tun.0".to_string(),
-        ip: private_ip.clone(),
-        mask: config.device_config.mask,
-        gateway: config.device_config.gateway,
-        mtu: config.device_config.mtu,
+        name: "rustun".to_string(),
+        ip: device_config.private_ip.clone(),
+        mask: device_config.mask.clone(),
+        gateway: device_config.gateway,
+        mtu: 1430,
         routes: vec![],
     }) {
         Ok(_) => {}

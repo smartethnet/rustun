@@ -1,18 +1,15 @@
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc};
 use tokio::time::{interval, Duration};
-use crate::client::sys_route::SysRoute;
-use crate::codec::frame::{Frame, HandshakeFrame, KeepAliveFrame};
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
 use crate::server::connection::{Connection, TcpConnection};
 
 #[derive(Clone)]
 pub struct ClientConfig {
     pub server_addr: String,
-    pub private_ip: String,
-    pub cidr: Vec<String>,
     pub keepalive_interval: Duration,
     pub outbound_buffer_size: usize,
     pub keep_alive_thresh: u8,
@@ -24,7 +21,6 @@ pub struct Client {
     outbound_rx: mpsc::Receiver<Frame>,
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
-    sys_route: SysRoute,
 }
 
 impl Client {
@@ -32,26 +28,10 @@ impl Client {
                outbound_rx: mpsc::Receiver<Frame>,
                inbound_tx: mpsc::Sender<Frame>,
                block: Arc<Box<dyn Block>>) -> Self {
-        Self { cfg, outbound_rx, inbound_tx, block, sys_route: SysRoute::new() }
+        Self { cfg, outbound_rx, inbound_tx, block}
     }
 
-    pub async fn run_loop(&mut self)  {
-        loop {
-            let result = self.run().await;
-            tracing::warn!("run client fail {:?}, reconnecting", result);
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        }
-    }
-
-    pub async fn run(&mut self) -> crate::Result<()> {
-        let socket = TcpStream::connect(&self.cfg.server_addr).await?;
-        let mut conn = TcpConnection::new(socket, self.block.clone());
-        tracing::info!("Connected to server {}", self.cfg.server_addr);
-
-        if let Err(e) = self.handshake(&mut conn).await {
-            return Err(e);
-        }
-
+    pub async fn run(&mut self, conn: &mut TcpConnection) -> crate::Result<()> {
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
         let mut keepalive_wait: u8 = 0;
         loop {
@@ -121,26 +101,29 @@ impl Client {
         Ok(())
     }
 
-    async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<()> {
-        // send handshake
-        tracing::info!("handshake");
+    async fn connect(&self) -> crate::Result<TcpConnection> {
+        match TcpStream::connect(&self.cfg.server_addr).await {
+            Ok(stream) => {
+                let conn = TcpConnection::new(stream, self.block.clone());
+                Ok(conn)
+            },
+            Err(e) => Err(e.into()),
+        }
+
+
+    }
+
+    async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<HandshakeReplyFrame> {
         conn.write_frame(Frame::Handshake(HandshakeFrame{
             identity: self.cfg.identity.clone(),
         })).await?;
-        tracing::info!("send to server");
-        // recv handshake
+
         let frame = conn.read_frame().await?;
         if let Frame::HandshakeReply(frame) = frame {
-            tracing::info!("received handshake frame: {:?}", frame);
-            // add sys route
-            for route_item in frame.others {
-                if let Err(e) = self.sys_route.add(route_item.ciders,
-                                                   self.cfg.private_ip.clone(),) {
-                    tracing::error!("Failed to add route item to route item: {}", e);
-                }
-            }
+            return Ok(frame);
         }
-        Ok(())
+
+        Err("invalid frame".into())
     }
 }
 
@@ -161,12 +144,38 @@ impl ClientHandler {
         }
     }
 
-    pub fn run_client(&mut self){
+    pub fn run_client(&mut self, on_ready: mpsc::Sender<HandshakeReplyFrame>) {
         let (outbound_tx, outbound_rx) = mpsc::channel(self.cfg.outbound_buffer_size);
         let (inbound_tx, inbound_rx) = mpsc::channel(self.cfg.outbound_buffer_size);
         let mut client = Client::new(self.cfg.clone(), outbound_rx, inbound_tx, self.block.clone());
+
         tokio::spawn(async move {
-            client.run_loop().await;
+            loop {
+                let mut conn = match client.connect().await {
+                    Ok(socket) => socket,
+                    Err(e) => {
+                        tracing::error!("connect error: {}", e);
+                        continue;
+                    }
+                };
+
+                let frame = match client.handshake(&mut conn).await {
+                    Ok(frame) => frame,
+                    Err(e) => {
+                        tracing::warn!("handshake fail {:?}, reconnecting", e);
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        continue;
+                    }
+                };
+                if let Err(e) = on_ready.send(frame).await {
+                    tracing::error!("on ready send fail: {}", e);
+                }
+
+                let result = client.run(&mut conn).await;
+
+                tracing::warn!("run client fail {:?}, reconnecting", result);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
         });
         self.outbound_tx = Some(outbound_tx);
         self.inbound_rx = Some(inbound_rx);

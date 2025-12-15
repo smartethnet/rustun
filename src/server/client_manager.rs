@@ -6,6 +6,8 @@ use serde::Deserialize;
 pub struct ClientConfig {
     pub identity: String,
     pub private_ip: String,
+    pub mask: String,
+    pub gateway: String,
     pub ciders: Vec<String>
 }
 

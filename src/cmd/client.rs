@@ -1,7 +1,7 @@
-use rustun::client::runner;
+use rustun::client::main;
 
 #[tokio::main]
 async fn main() {
-    let err = runner::run_client().await;
+    let err = main::run_client().await;
     panic!("{:?}", err);
 }
