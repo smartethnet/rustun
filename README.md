@@ -49,7 +49,7 @@ ciders = []
 it will:
 
 - listen `0.0.0.0:8080`
-- use xor crypto metho with key `rustun`
+- use xor crypto method with key `rustun`
 - add two clients configurations
 
 client1: headquarters
