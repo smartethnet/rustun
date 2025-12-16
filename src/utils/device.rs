@@ -3,12 +3,10 @@ use tokio::sync::mpsc;
 
 #[derive(Clone)]
 pub struct DeviceConfig {
-    pub name: String,
     pub ip: String,
     pub mask: String,
     pub gateway: String,
     pub mtu: u16,
-    pub routes: Vec<String>,
 }
 
 pub struct Device {

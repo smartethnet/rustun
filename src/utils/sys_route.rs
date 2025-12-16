@@ -22,6 +22,7 @@ impl SysRoute {
     /// Delete routes from the system routing table
     /// - dsts: destination CIDR addresses
     /// - gateway: gateway IP address
+    #[allow(unused)]
     pub fn del(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
         for dst in dsts {
             if let Err(e) = self.del_route(&dst, &gateway) {

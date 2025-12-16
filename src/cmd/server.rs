@@ -1,6 +1,6 @@
-use rustun::server::runner;
+use rustun::server::main;
 
 #[tokio::main]
 async fn main() {
-    runner::run_server().await;
+    main::run_server().await;
 }

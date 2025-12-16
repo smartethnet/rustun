@@ -2,16 +2,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use clap::Parser;
 use tokio::sync::mpsc;
-use tracing::level_filters::LevelFilter;
-use tracing_subscriber::EnvFilter;
 
 use crate::client::client::{ClientConfig, ClientHandler};
-use crate::client::device::{DeviceConfig, DeviceHandler};
-use crate::client::sys_route::SysRoute;
+use crate::utils::device::{DeviceConfig, DeviceHandler};
+use crate::utils::sys_route::SysRoute;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block, CryptoConfig};
+use crate::utils;
 
-const DEFAULT_DEVICE_NAME: &str = "rustun";
 const DEFAULT_MTU: u16 = 1430;
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
 const CONFIG_CHANNEL_SIZE: usize = 10;
@@ -44,7 +42,7 @@ struct Args {
 pub async fn run_client() {
     let args = Args::parse();
 
-    if let Err(e) = init_tracing() {
+    if let Err(e) = utils::init_tracing() {
         eprintln!("Failed to initialize logging: {}", e);
         return;
     }
@@ -89,21 +87,6 @@ pub async fn run_client() {
     run_event_loop(&mut handler, &mut dev).await;
 }
 
-fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::FmtSubscriber::builder()
-            .with_env_filter(
-                EnvFilter::builder()
-                    .with_default_directive(LevelFilter::INFO.into())
-                    .from_env_lossy(),
-            )
-            .with_line_number(true)
-            .with_file(true)
-            .finish(),
-    )?;
-    Ok(())
-}
-
 fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
     let parts: Vec<&str> = crypto_str.splitn(2, ':').collect();
     
@@ -142,12 +125,10 @@ fn create_client_handler(args: &Args, crypto_config: &CryptoConfig) -> ClientHan
 fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandler> {
     let mut dev = DeviceHandler::new();
     dev.run(DeviceConfig {
-        name: DEFAULT_DEVICE_NAME.to_string(),
         ip: device_config.private_ip.clone(),
         mask: device_config.mask.clone(),
         gateway: device_config.gateway.clone(),
         mtu: DEFAULT_MTU,
-        routes: vec![],
     })?;
 
     // add sys route

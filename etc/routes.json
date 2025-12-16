@@ -1,0 +1,23 @@
+[
+    {
+      "identity": "headquarters",
+      "private_ip": "10.0.0.2",
+      "mask": "255.255.255.0",
+      "gateway": "10.0.0.1",
+      "ciders": ["192.168.1.0/24"]
+    },
+    {
+      "identity": "branch_a",
+      "private_ip": "10.0.0.3",
+      "mask": "255.255.255.0",
+      "gateway": "10.0.0.1",
+      "ciders": ["192.168.10.0/24"]
+    },
+    {
+      "identity": "branch_b",
+      "private_ip": "10.0.0.4",
+      "mask": "255.255.255.0",
+      "gateway": "10.0.0.1",
+      "ciders": ["192.168.100.0/24"]
+    }
+]
