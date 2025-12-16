@@ -1,23 +1,50 @@
 [
-    {
-      "identity": "headquarters",
-      "private_ip": "10.0.0.2",
-      "mask": "255.255.255.0",
-      "gateway": "10.0.0.1",
-      "ciders": ["192.168.1.0/24"]
-    },
-    {
-      "identity": "branch_a",
-      "private_ip": "10.0.0.3",
-      "mask": "255.255.255.0",
-      "gateway": "10.0.0.1",
-      "ciders": ["192.168.10.0/24"]
-    },
-    {
-      "identity": "branch_b",
-      "private_ip": "10.0.0.4",
-      "mask": "255.255.255.0",
-      "gateway": "10.0.0.1",
-      "ciders": ["192.168.100.0/24"]
-    }
+  {
+    "cluster": "beijing",
+    "identity": "bj-office-gw",
+    "private_ip": "10.0.1.1",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.1.254",
+    "ciders": ["192.168.1.0/24", "192.168.2.0/24"]
+  },
+  {
+    "cluster": "beijing",
+    "identity": "bj-dev-server",
+    "private_ip": "10.0.1.2",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.1.254",
+    "ciders": []
+  },
+  {
+    "cluster": "shanghai",
+    "identity": "sh-office-gw",
+    "private_ip": "10.0.2.1",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.2.254",
+    "ciders": ["192.168.10.0/24"]
+  },
+  {
+    "cluster": "shanghai",
+    "identity": "sh-db-server",
+    "private_ip": "10.0.2.2",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.2.254",
+    "ciders": []
+  },
+  {
+    "cluster": "remote",
+    "identity": "remote-alice",
+    "private_ip": "10.0.100.1",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.100.254",
+    "ciders": []
+  },
+  {
+    "cluster": "remote",
+    "identity": "remote-bob",
+    "private_ip": "10.0.100.2",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.100.254",
+    "ciders": []
+  }
 ]

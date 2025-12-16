@@ -155,6 +155,7 @@ impl ClientHandler {
                     Ok(socket) => socket,
                     Err(e) => {
                         tracing::error!("connect error: {}", e);
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                         continue;
                     }
                 };

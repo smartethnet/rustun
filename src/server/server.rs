@@ -95,6 +95,7 @@ pub struct Handler {
     conn: Box<dyn Connection>,
     outbound_tx: mpsc::Sender<Frame>,
     outbound_rx: mpsc::Receiver<Frame>,
+    cluster: Option<String>,
 }
 
 impl Handler {
@@ -110,6 +111,7 @@ impl Handler {
             conn: Box::new(conn),
             outbound_rx: rx,
             outbound_tx: tx,
+            cluster: None,
         }
     }
 
@@ -130,7 +132,7 @@ impl Handler {
         };
 
         // reply handshake with other clients info
-        let others = self.client_manager.get_clients_exclude(&hs.identity);
+        let others = self.client_manager.get_cluster_clients_exclude(&hs.identity);
         let route_items: Vec<RouteItem> = others.iter().map(|client| {
             RouteItem {
                 identity: client.identity.clone(),
@@ -151,6 +153,10 @@ impl Handler {
             outbound_tx: self.outbound_tx.clone(),
         };
         tracing::debug!("handshake completed with {:?}", meta);
+        
+        // Store cluster for routing
+        self.cluster = Some(client_config.cluster.clone());
+        
         self.connection_manager.add_connection(meta);
 
         loop {
@@ -192,7 +198,6 @@ impl Handler {
         match frame {
             Ok(frame) => {
                 tracing::info!("handshake: {}", frame);
-                // TODO: authorization
                 if let Frame::Handshake(handshake) = frame {
                     Ok(handshake)
                 } else {
@@ -226,9 +231,17 @@ impl Handler {
                 }
                 tracing::info!("on data: {} => {}", frame.src(), frame.dst());
 
-                // route
+                // route within cluster (tenant isolation)
                 let dst_ip = frame.dst();
-                let dst_client = self.connection_manager.get_connection(&dst_ip);
+                let cluster = match &self.cluster {
+                    Some(c) => c,
+                    None => {
+                        tracing::error!("cluster not set");
+                        return;
+                    }
+                };
+                
+                let dst_client = self.connection_manager.get_connection(cluster, &dst_ip);
                 if let Some(dst_client) = dst_client {
                     let result = dst_client.outbound_tx.
                         send(Frame::Data(frame)).await;
@@ -236,7 +249,7 @@ impl Handler {
                         tracing::warn!("dst client {} not online", dst_ip);
                     }
                 } else {
-                    tracing::warn!("no route to {}",dst_ip);
+                    tracing::warn!("no route to {} in cluster {}", dst_ip, cluster);
                 }
             }
             _ => {
