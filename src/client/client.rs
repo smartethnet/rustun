@@ -56,7 +56,7 @@ impl Client {
                 result = conn.read_frame() => {
                     match result {
                         Ok(frame) => {
-                            tracing::info!("received frame {}", frame);
+                            tracing::debug!("received frame {}", frame);
                             let beg = Instant::now();
                             match frame {
                                 Frame::KeepAlive(_) => {
@@ -72,7 +72,7 @@ impl Client {
                                 }
                                 _ => {}
                             }
-                            tracing::info!("handle frame cost {}", beg.elapsed().as_millis());
+                            tracing::debug!("handle frame cost {}", beg.elapsed().as_millis());
                         }
                         Err(e) => {
                             tracing::error!("Read error: {}", e);
@@ -91,12 +91,12 @@ impl Client {
                     if let Err(e) = conn.write_frame(frame.unwrap()).await {
                         tracing::error!("device => server write frame: {}", e);
                     }
-                    tracing::info!("send to server cost {}", now.elapsed().as_millis());
+                    tracing::debug!("send to server cost {}", now.elapsed().as_millis());
                 }
             }
         }
 
-        tracing::info!("client disconnected");
+        tracing::debug!("client disconnected");
         let _ = conn.close().await;
         Ok(())
     }

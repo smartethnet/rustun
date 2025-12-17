@@ -40,7 +40,7 @@ impl ClientManager {
             .unwrap_or_else(|e| { e.into_inner() });
         
         for client in clients {
-            tracing::info!("add client config {:?}", client);
+            tracing::debug!("add client config {:?}", client);
             clients_map.insert(client.identity.clone(), client.clone());
             cluster_map
                 .entry(client.cluster.clone())

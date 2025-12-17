@@ -19,7 +19,7 @@ impl ConnectionManager {
         let identity = meta.client_config.identity.clone();
         let cluster = meta.client_config.cluster.clone();
         
-        tracing::info!("Add connection: cluster={}, identity={}", cluster, identity);
+        tracing::debug!("Add connection: cluster={}, identity={}", cluster, identity);
         
         self.cluster_connections.write()
             .unwrap_or_else(|e| e.into_inner())
@@ -37,7 +37,7 @@ impl ConnectionManager {
         for (cluster, connections) in cluster_map.iter_mut() {
             if let Some(pos) = connections.iter().position(|c| c.client_config.identity == identity) {
                 connections.remove(pos);
-                tracing::info!("Removed connection: cluster={}, identity={}", cluster, identity);
+                tracing::debug!("Removed connection: cluster={}, identity={}", cluster, identity);
                 
                 if connections.is_empty() {
                     cluster_to_remove = Some(cluster.clone());
@@ -65,13 +65,13 @@ impl ConnectionManager {
     pub fn print_connections(&self) {
         let cluster_map = self.cluster_connections.read().unwrap_or_else(|e| e.into_inner());
         
-        tracing::info!("=== Connection Manager Stats ===");
-        tracing::info!("Total clusters: {}", cluster_map.len());
+        tracing::debug!("=== Connection Manager Stats ===");
+        tracing::debug!("Total clusters: {}", cluster_map.len());
         
         for (cluster, connections) in cluster_map.iter() {
-            tracing::info!("Cluster '{}': {} connections", cluster, connections.len());
+            tracing::debug!("Cluster '{}': {} connections", cluster, connections.len());
             for conn in connections {
-                tracing::info!("  - {} ({})", 
+                tracing::debug!("  - {} ({})", 
                     conn.client_config.identity,
                     conn.client_config.private_ip);
             }

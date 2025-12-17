@@ -2,7 +2,8 @@
 listen_addr = "0.0.0.0:8080"
 
 [crypto_config]
-xor="rustun"
+#xor="rustun"
+chacha20poly1305 = "rustun"
 
 [route_config]
 routes_file = "./etc/routes.json"

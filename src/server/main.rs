@@ -14,7 +14,7 @@ pub async fn run_server() {
     }
 
     let client_routes = config::load_routes(cfg.route_config.routes_file.as_str()).unwrap();
-    tracing::info!("config: {:?}, routes: {:?}", cfg, client_routes);
+    tracing::debug!("config: {:?}, routes: {:?}", cfg, client_routes);
 
     let client_manager = Arc::new(ClientManager::new());
     client_manager.add_clients_config(client_routes);

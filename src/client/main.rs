@@ -4,6 +4,7 @@ use clap::Parser;
 use tokio::sync::mpsc;
 
 use crate::client::client::{ClientConfig, ClientHandler};
+use crate::client::prettylog::{log_handshake_success, log_startup_banner};
 use crate::utils::device::{DeviceConfig, DeviceHandler};
 use crate::utils::sys_route::SysRoute;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
@@ -17,26 +18,26 @@ const CONFIG_CHANNEL_SIZE: usize = 10;
 /// Rustun VPN Client
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-struct Args {
+pub struct Args {
     /// Server address (e.g., 127.0.0.1:8080)
     #[arg(short, long)]
-    server: String,
+    pub server: String,
 
     /// Client identity/name
     #[arg(short, long)]
-    identity: String,
+    pub identity: String,
 
-    /// Encryption method: plain, aes256:<key>, or xor:<key>
-    #[arg(short, long, default_value = "xor:rustun")]
-    crypto: String,
+    /// Encryption method: plain, aes256:<key>, chacha20:<key>, or xor:<key>
+    #[arg(short, long, default_value = "chacha20:rustun")]
+    pub crypto: String,
 
     /// Keep-alive interval in seconds
     #[arg(long, default_value = "10")]
-    keepalive_interval: u64,
+    pub keepalive_interval: u64,
 
     /// Keep-alive threshold (reconnect after this many failures)
     #[arg(long, default_value = "5")]
-    keepalive_threshold: u8,
+    pub keepalive_threshold: u8,
 }
 
 pub async fn run_client() {
@@ -47,10 +48,7 @@ pub async fn run_client() {
         return;
     }
 
-    tracing::info!("Starting Rustun VPN Client");
-    tracing::info!("  Server: {}", args.server);
-    tracing::info!("  Identity: {}", args.identity);
-    tracing::info!("  Crypto: {}", args.crypto);
+    log_startup_banner(&args);
 
     // Parse crypto configuration
     let crypto_config = match parse_crypto_config(&args.crypto) {
@@ -67,7 +65,7 @@ pub async fn run_client() {
 
     let device_config = match config_ready_rx.recv().await {
         Some(cfg) => {
-            tracing::info!("Received device config from server: {:?}", cfg);
+            log_handshake_success(&cfg);
             cfg
         }
         None => {
@@ -83,7 +81,7 @@ pub async fn run_client() {
             return;
         }
     };
-
+    
     run_event_loop(&mut handler, &mut dev).await;
 }
 
@@ -98,13 +96,19 @@ fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
             }
             Ok(CryptoConfig::Aes256(parts[1].to_string()))
         }
+        "chacha20" => {
+            if parts.len() < 2 {
+                anyhow::bail!("ChaCha20 requires a key: chacha20:<key>");
+            }
+            Ok(CryptoConfig::ChaCha20Poly1305(parts[1].to_string()))
+        }
         "xor" => {
             if parts.len() < 2 {
                 anyhow::bail!("XOR requires a key: xor:<key>");
             }
             Ok(CryptoConfig::Xor(parts[1].to_string()))
         }
-        _ => anyhow::bail!("Unknown crypto method: {}. Use plain, aes256:<key>, or xor:<key>", parts[0]),
+        _ => anyhow::bail!("Unknown crypto method: {}. Use plain, aes256:<key>, chacha20:<key>, or xor:<key>", parts[0]),
     }
 }
 
@@ -159,8 +163,6 @@ async fn run_event_loop(handler: &mut ClientHandler, dev: &mut DeviceHandler) {
             }
         }
     }
-    
-    tracing::info!("Event loop terminated, client shutting down");
 }
 
 async fn handle_device_packet(handler: &mut ClientHandler, packet: Vec<u8>) {

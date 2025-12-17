@@ -39,7 +39,7 @@ impl Server {
 impl Server {
     pub async fn listen_and_serve(&mut self) -> crate::Result<()> {
         let listener = TcpListener::bind(self.addr.clone()).await?;
-        tracing::info!("Server started at {}", self.addr);
+        tracing::debug!("Server started at {}", self.addr);
         self.listener = Some(listener);
         loop {
             tokio::select! {
@@ -77,14 +77,14 @@ impl Server {
 
     fn handle_conn(&self, socket: TcpStream) {
         let peer_addr = socket.peer_addr().unwrap();
-        tracing::info!("new connection from {}", socket.peer_addr().unwrap());
+        tracing::debug!("new connection from {}", socket.peer_addr().unwrap());
 
         let mut handler = Handler::new(self.connection_manager.clone(),
                                        self.client_manager.clone(),
                                        socket, self.block.clone());
         tokio::task::spawn(async move {
             let e = handler.run().await;
-            tracing::info!("client {:?} handler stop with {:?}", peer_addr, e);
+            tracing::debug!("client {:?} handler stop with {:?}", peer_addr, e);
         });
     }
 }
@@ -126,7 +126,7 @@ impl Handler {
         let client_config = match self.client_manager.get_client(&hs.identity) {
             Some(c) => c,
             None => {
-                tracing::info!("{} unauthorized", hs.identity);
+                tracing::debug!("{} unauthorized", hs.identity);
                 return Ok(());
             }
         };
@@ -165,7 +165,7 @@ impl Handler {
                 result = self.conn.read_frame() => {
                     match result {
                         Ok(frame) => {
-                            tracing::info!("received frame: {}", frame);
+                            tracing::debug!("received frame: {}", frame);
                             self.handle_frame(frame).await;
                         }
                         Err(e) => {
@@ -178,7 +178,7 @@ impl Handler {
                 // write frame
                 frame = self.outbound_rx.recv() => {
                     if let Some(frame) = frame {
-                        tracing::info!("send frame {}", frame);
+                        tracing::debug!("send frame {}", frame);
                         if let Err(e) = self.conn.write_frame(frame).await {
                             tracing::debug!("connection closed with {:?}", e);
                             break;
@@ -188,7 +188,7 @@ impl Handler {
             }
         }
 
-        tracing::info!("delete client {}", hs.identity);
+        tracing::debug!("delete client {}", hs.identity);
         self.connection_manager.del_connection(hs.identity);
         Ok(())
     }
@@ -197,7 +197,7 @@ impl Handler {
         let frame = self.conn.read_frame().await;
         match frame {
             Ok(frame) => {
-                tracing::info!("handshake: {}", frame);
+                tracing::debug!("handshake: {}", frame);
                 if let Frame::Handshake(handshake) = frame {
                     Ok(handshake)
                 } else {
@@ -213,7 +213,7 @@ impl Handler {
     async fn handle_frame(&mut self, frame: Frame){
         match frame {
             Frame::KeepAlive(frame) => {
-                tracing::info!("on keepalive");
+                tracing::debug!("on keepalive");
                 if let Err(e) = self.outbound_tx.send(Frame::KeepAlive(frame)).await {
                     tracing::error!("reply keepalive frame failed with {:?}", e);
                 }
@@ -229,7 +229,7 @@ impl Handler {
                     tracing::warn!("receive invalid ipv4 packet");
                     return;
                 }
-                tracing::info!("on data: {} => {}", frame.src(), frame.dst());
+                tracing::debug!("on data: {} => {}", frame.src(), frame.dst());
 
                 // route within cluster (tenant isolation)
                 let dst_ip = frame.dst();
