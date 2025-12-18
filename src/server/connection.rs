@@ -116,7 +116,6 @@ impl Connection for TcpConnection {
                     Err("connection reset by peer".into())
                 }
             }
-
         }
     }
 

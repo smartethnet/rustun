@@ -22,6 +22,7 @@ chacha20poly1305 = "0.10"
 toml = "0.9.8"
 ipnet = "2.10"
 clap = { version = "4.5", features = ["derive"] }
+ureq = "2.10"
 
 [[bin]]
 name = "server"

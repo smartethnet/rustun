@@ -116,6 +116,9 @@ pub struct HandshakeFrame {
     /// - Look up network configuration (private IP, CIDR ranges)
     /// - Determine cluster membership for multi-tenancy
     pub identity: String,
+
+    /// Public IPv6
+    pub ipv6: String,
 }
 
 /// Handshake reply frame sent by server in response to client handshake
@@ -145,6 +148,11 @@ pub struct HandshakeReplyFrame {
     /// Each RouteItem contains routing information for a peer node,
     /// allowing this client to establish routes to other VPN members
     pub others: Vec<RouteItem>,
+
+    /// Public IPv6
+    ///
+    /// Others will try to connect IPv6 directly
+    pub ipv6: String,
 }
 
 /// Routing information for a peer node

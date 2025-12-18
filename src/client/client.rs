@@ -14,6 +14,7 @@ pub struct ClientConfig {
     pub outbound_buffer_size: usize,
     pub keep_alive_thresh: u8,
     pub identity: String,
+    pub ipv6: String,
 }
 
 pub struct Client {
@@ -109,13 +110,12 @@ impl Client {
             },
             Err(e) => Err(e.into()),
         }
-
-
     }
 
     async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<HandshakeReplyFrame> {
         conn.write_frame(Frame::Handshake(HandshakeFrame{
             identity: self.cfg.identity.clone(),
+            ipv6: self.cfg.ipv6.clone(),
         })).await?;
 
         let frame = conn.read_frame().await?;

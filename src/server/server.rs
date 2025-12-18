@@ -146,6 +146,7 @@ impl Handler {
             mask: client_config.mask.clone(),
             gateway: client_config.gateway.clone(),
             others: route_items,
+            ipv6: hs.ipv6,
         })).await?;
 
         let meta = ConnectionMeta {

@@ -113,12 +113,14 @@ fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
 }
 
 fn create_client_handler(args: &Args, crypto_config: &CryptoConfig) -> ClientHandler {
+    let ipv6 = utils::get_ipv6().unwrap_or("".to_string());
     let client_config = ClientConfig {
         server_addr: args.server.clone(),
         keepalive_interval: Duration::from_secs(args.keepalive_interval),
         outbound_buffer_size: OUTBOUND_BUFFER_SIZE,
         keep_alive_thresh: args.keepalive_threshold,
         identity: args.identity.clone(),
+        ipv6,
     };
 
     let block = crypto::new_block(crypto_config);

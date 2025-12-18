@@ -54,6 +54,8 @@ pub trait Block: Send + Sync {
 /// 
 /// # Examples
 /// ```
+/// use rustun::crypto::new_block;
+/// use rustun::crypto::CryptoConfig;
 /// let config = CryptoConfig::Aes256("secret_key".to_string());
 /// let cipher = new_block(&config);
 /// ```

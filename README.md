@@ -280,7 +280,7 @@ ping 10.0.2.2  # From sh-office-gw to sh-db-server
 ```
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
 │  Client A   │◄───────►│   Server    │◄───────►│  Client B   │
-│  (Beijing)  │   TLS   │  (Central)  │   TLS   │  (Shanghai) │
+│  (Beijing)  │         │  (Central)  │         │  (Shanghai) │
 └─────────────┘         └─────────────┘         └─────────────┘
       │                                                 │
       │ Virtual IP: 10.0.1.1                Virtual IP: 10.0.2.1
@@ -345,33 +345,6 @@ Frame Header (8 bytes):
 3. **Regular Key Rotation**: Change encryption keys periodically
 4. **Firewall Rules**: Restrict server port access to known client IPs
 5. **Monitor Logs**: Enable logging and monitor for suspicious activity
-
-## 🧪 Testing
-
-### Unit Tests
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific module tests
-cargo test crypto::
-cargo test codec::
-```
-
-### Integration Tests
-
-```bash
-# Test complete VPN workflow
-cd tests
-./integration_test.sh
-```
-
-### Performance Benchmarks
-
-```bash
-cargo bench
-```
 
 ## 🛠️ Troubleshooting
 
