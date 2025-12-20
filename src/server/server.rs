@@ -1,91 +1,74 @@
-use tokio::time::Duration;
-use tokio::time;
-use tokio::net::{TcpStream};
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
 use crate::codec::frame::Frame::HandshakeReply;
 use crate::crypto::Block;
-use crate::server::Connection;
-use crate::server::connection_manager::{ConnectionManager};
-use crate::server::connection::{ConnectionMeta, TcpConnection};
+use crate::network::{ConnectionMeta};
+use crate::network::connection_manager::ConnectionManager;
+use crate::network::{Connection, create_listener, ListenerConfig};
 use crate::server::client_manager::ClientManager;
+use crate::server::config::ServerConfig;
 
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
 
 pub struct Server {
-    addr: String,
+    server_config: ServerConfig,
     connection_manager: Arc<ConnectionManager>,
     client_manager: Arc<ClientManager>,
-    listener: Option<TcpListener>,
     block: Arc<Box<dyn Block>>,
 }
 
 impl Server {
-    pub fn new(addr: String,
+    pub fn new(server_config: ServerConfig,
                client_manager: Arc<ClientManager>,
                block: Arc<Box<dyn Block>>) -> Self {
         Server {
-            addr,
+            server_config,
             connection_manager: Arc::new(ConnectionManager::new()),
             client_manager,
-            listener: None,
             block,
         }
     }
 }
 
 impl Server {
-    pub async fn listen_and_serve(&mut self) -> crate::Result<()> {
-        let listener = TcpListener::bind(self.addr.clone()).await?;
-        tracing::debug!("Server started at {}", self.addr);
-        self.listener = Some(listener);
+    pub async fn run(&mut self) -> crate::Result<()> {
+        let listener = create_listener("tcp", ListenerConfig{
+            listen_addr: self.server_config.listen_addr.clone(),
+        }, self.block.clone());
+
+        let mut listener = match listener {
+            Ok(listener) => listener,
+            Err(err) => {
+                return Err(err.into());
+            }
+        };
+
+        let mut on_conn_rx = listener.subscribe_on_conn().await?;
+
         loop {
             tokio::select! {
-                socket = self.accept() => {
-                    match socket {
-                        Ok(socket) => {
-                            self.handle_conn(socket)
-                        },
-                        Err(e) => {
-                            return Err(e.into());
-                        }
-                    };
-                }
-            }
-        }
-    }
-
-    async fn accept(&mut self) -> crate::Result<TcpStream> {
-        let mut backoff = 1;
-
-        loop {
-            match self.listener.as_ref().unwrap().accept().await {
-                Ok((socket, _)) => return Ok(socket),
-                Err(err) => {
-                    if backoff > 64 {
-                        return Err(err.into());
+                conn = on_conn_rx.recv() => {
+                    if let Some(conn) = conn {
+                        let _ = self.handle_conn(conn);
                     }
                 }
             }
-
-            time::sleep(Duration::from_secs(backoff)).await;
-            backoff *= 2;
         }
     }
 
-    fn handle_conn(&self, socket: TcpStream) {
-        let peer_addr = socket.peer_addr().unwrap();
-        tracing::debug!("new connection from {}", socket.peer_addr().unwrap());
+    fn handle_conn(&self, mut conn: Box<dyn Connection>) -> crate::Result<()> {
+        let peer_addr = conn.peer_addr().unwrap();
+        tracing::debug!("new connection from {}", conn.peer_addr().unwrap());
 
         let mut handler = Handler::new(self.connection_manager.clone(),
                                        self.client_manager.clone(),
-                                       socket, self.block.clone());
+                                       conn);
         tokio::task::spawn(async move {
             let e = handler.run().await;
             tracing::debug!("client {:?} handler stop with {:?}", peer_addr, e);
         });
+        Ok(())
     }
 }
 
@@ -101,14 +84,12 @@ pub struct Handler {
 impl Handler {
     pub fn new(connection_manager: Arc<ConnectionManager>,
                client_manager: Arc<ClientManager>,
-               tcp_stream: TcpStream,
-               block: Arc<Box<dyn Block>>) -> Handler {
+               conn: Box<dyn Connection>) -> Handler {
         let (tx, rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
-        let conn = TcpConnection::new(tcp_stream, block);
         Self{
             connection_manager,
             client_manager,
-            conn: Box::new(conn),
+            conn,
             outbound_rx: rx,
             outbound_tx: tx,
             cluster: None,
@@ -150,14 +131,18 @@ impl Handler {
         })).await?;
 
         let meta = ConnectionMeta {
-            client_config: client_config.clone(),
+            cluster: client_config.cluster.clone(),
+            identity: client_config.identity.clone(),
+            private_ip: client_config.private_ip.clone(),
+            mask: client_config.mask.clone(),
+            gateway: client_config.gateway.clone(),
+            ciders: client_config.ciders.clone(),
             outbound_tx: self.outbound_tx.clone(),
         };
         tracing::debug!("handshake completed with {:?}", meta);
         
         // Store cluster for routing
         self.cluster = Some(client_config.cluster.clone());
-        
         self.connection_manager.add_connection(meta);
 
         loop {
@@ -259,4 +244,3 @@ impl Handler {
         }
     }
 }
-

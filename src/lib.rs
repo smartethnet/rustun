@@ -3,6 +3,7 @@ pub mod server;
 pub mod crypto;
 pub mod client;
 pub mod utils;
+pub mod network;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;

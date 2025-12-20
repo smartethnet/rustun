@@ -10,7 +10,7 @@ pub struct Config {
     pub route_config: RouteConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ServerConfig {
     pub listen_addr: String,
 }

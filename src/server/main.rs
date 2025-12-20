@@ -2,7 +2,7 @@ use std::sync::Arc;
 use crate::{crypto, utils};
 use crate::server::config;
 use crate::server::client_manager::ClientManager;
-use crate::server::server::Server;
+use crate::server::server::{Server};
 
 pub async fn run_server() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -21,11 +21,9 @@ pub async fn run_server() {
 
     // TODO: load dynamic client configurations
 
-    let addr = cfg.server_config.listen_addr;
     let block = crypto::new_block(&cfg.crypto_config);
-    let mut server = Server::new(addr, client_manager, Arc::new(block));
-
-    if let Err(e) = server.listen_and_serve().await {
+    let mut server = Server::new(cfg.server_config.clone(), client_manager, Arc::new(block));
+    if let Err(e) = server.run().await {
         tracing::error!("Server error: {}", e);
     }
 }

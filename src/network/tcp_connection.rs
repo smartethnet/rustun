@@ -1,75 +1,47 @@
-use crate::crypto::Block;
-use std::fmt::Display;
-use std::sync::Arc;
 use crate::codec::frame::Frame;
 use crate::codec::parser::Parser;
+use crate::crypto::plain::PlainBlock;
+use crate::crypto::Block;
+use crate::network::Connection;
 use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
+use std::io;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
-use std::net::IpAddr;
-use ipnet::IpNet;
-use crate::server::client_manager::ClientConfig;
-pub(crate) use crate::server::Connection;
 
+/// Default timeout for read operations
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
+/// Default timeout for write operations
 const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
-#[derive(Debug, Clone)]
-pub struct ConnectionMeta {
-    pub client_config: ClientConfig,
-    pub(crate) outbound_tx: mpsc::Sender<Frame>,
-}
-
-impl PartialEq<ConnectionMeta> for &ConnectionMeta {
-    fn eq(&self, other: &ConnectionMeta) -> bool {
-        self.client_config.identity == other.client_config.identity
-    }
-}
-
-impl ConnectionMeta {
-    pub fn match_dst(&self, dst: String) -> bool {
-        if self.client_config.private_ip == dst {
-            return true;
-        }
-
-        let dst_ip = match dst.parse::<IpAddr>() {
-            Ok(ip) => ip,
-            Err(_) => return false, 
-        };
-
-        for cidr in &self.client_config.ciders {
-            if let Ok(network) = cidr.parse::<IpNet>() {
-                if network.contains(&dst_ip) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-}
-
-impl Display for ConnectionMeta {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.client_config.identity, self.client_config.private_ip)
-    }
-}
-
+/// TCP connection wrapper with frame parsing and encryption
+/// 
+/// Handles reading/writing frames over TCP with buffering and encryption.
 pub struct TcpConnection {
+    /// Underlying TCP socket
     socket: TcpStream,
+    /// Write operation timeout
     #[allow(dead_code)]
     write_timeout: Duration,
+    /// Read operation timeout
     #[allow(dead_code)]
     read_timeout: Duration,
+    /// Input buffer for incomplete frames
     input_stream: BytesMut,
+    /// Crypto block for encryption/decryption
     #[allow(unused)]
     block: Arc<Box<dyn Block>>
 }
 
 impl TcpConnection {
+    /// Create a new TCP connection with encryption
+    /// 
+    /// # Arguments
+    /// - `socket` - Established TCP stream
+    /// - `block` - Crypto block for encryption/decryption
     pub fn new(socket: TcpStream, block: Arc<Box<dyn Block>>) -> Self {
         Self {
             socket,
@@ -79,9 +51,32 @@ impl TcpConnection {
             block
         }
     }
-}
 
-impl TcpConnection {
+    /// Create a TCP connection from socket with no encryption
+    /// 
+    /// Uses PlainBlock for passthrough mode (no encryption).
+    /// 
+    /// # Arguments
+    /// - `socket` - Established TCP stream
+    pub fn from_socket(socket: TcpStream) -> Self {
+        Self{
+            socket,
+            write_timeout: DEFAULT_WRITE_TIMEOUT,
+            read_timeout: DEFAULT_READ_TIMEOUT,
+            input_stream: BytesMut::with_capacity(4096),
+            block: Arc::new(Box::new(PlainBlock::new())),
+        }
+    }
+    
+    /// Parse a complete frame from the input buffer
+    /// 
+    /// Attempts to parse a frame from buffered data. If successful,
+    /// advances the buffer by the consumed bytes.
+    /// 
+    /// # Returns
+    /// - `Ok(Some(Frame))` - Successfully parsed frame
+    /// - `Ok(None)` - Incomplete data, need more bytes
+    /// - `Err` - Parse error (invalid frame format)
     fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
         let result = Parser::unmarshal(self.input_stream.as_ref(), self.block.as_ref());
         match result {
@@ -90,7 +85,6 @@ impl TcpConnection {
                 Ok(Some(frame))
             },
             Err(e) => {
-
                 Err(e.into())
             }
         }
@@ -99,9 +93,16 @@ impl TcpConnection {
 
 #[async_trait]
 impl Connection for TcpConnection {
+    /// Read a complete frame from the connection
+    /// 
+    /// Reads data from the socket into a buffer and attempts to parse
+    /// complete frames. Blocks until a frame is available or error occurs.
+    /// 
+    /// # Returns
+    /// - `Ok(Frame)` - Successfully received frame
+    /// - `Err` - Connection error, EOF, or parse error
     async fn read_frame(&mut self) -> crate::Result<Frame> {
         loop {
-            // TODO: decrypt
             if let Ok(frame) = self.parse_frame() {
                 if let Some(frame) = frame {
                     return Ok(frame);
@@ -119,8 +120,17 @@ impl Connection for TcpConnection {
         }
     }
 
+    /// Write a frame to the connection
+    /// 
+    /// Marshals the frame with encryption and sends it over the socket.
+    /// 
+    /// # Arguments
+    /// - `frame` - Frame to send
+    /// 
+    /// # Returns
+    /// - `Ok(())` - Frame sent successfully
+    /// - `Err` - Marshal error or write error
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()> {
-        // TODO: encrypt
         let result = Parser::marshal(frame, self.block.as_ref());
         let buf = match result {
             Ok(buf) => buf,
@@ -139,7 +149,13 @@ impl Connection for TcpConnection {
         Ok(())
     }
 
+    /// Close the connection gracefully
     async fn close(&mut self)  {
         let _ = self.socket.shutdown().await;
+    }
+
+    /// Get the peer's socket address
+    fn peer_addr(&mut self) -> io::Result<SocketAddr> {
+        self.socket.peer_addr()
     }
 }

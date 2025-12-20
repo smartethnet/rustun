@@ -5,7 +5,8 @@ use tokio::sync::{mpsc};
 use tokio::time::{interval, Duration};
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
-use crate::server::connection::{Connection, TcpConnection};
+use crate::network::{Connection};
+use crate::network::tcp_connection::TcpConnection;
 
 #[derive(Clone)]
 pub struct ClientConfig {

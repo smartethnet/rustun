@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use crate::server::connection::ConnectionMeta;
 use std::sync::RwLock;
+use crate::network::ConnectionMeta;
 
 pub struct ConnectionManager {
     /// Cluster-based connections map (tenant isolation)
@@ -16,10 +16,10 @@ impl ConnectionManager {
     }
 
     pub fn add_connection(&self, meta: ConnectionMeta) {
-        let identity = meta.client_config.identity.clone();
-        let cluster = meta.client_config.cluster.clone();
+        let cluster = meta.cluster.clone();
         
-        tracing::debug!("Add connection: cluster={}, identity={}", cluster, identity);
+        tracing::debug!("Add connection: cluster={}, identity={}",
+            meta.identity, meta.cluster);
         
         self.cluster_connections.write()
             .unwrap_or_else(|e| e.into_inner())
@@ -35,7 +35,7 @@ impl ConnectionManager {
         let mut cluster_to_remove = None;
         
         for (cluster, connections) in cluster_map.iter_mut() {
-            if let Some(pos) = connections.iter().position(|c| c.client_config.identity == identity) {
+            if let Some(pos) = connections.iter().position(|c| c.identity == identity) {
                 connections.remove(pos);
                 tracing::debug!("Removed connection: cluster={}, identity={}", cluster, identity);
                 
@@ -59,22 +59,5 @@ impl ConnectionManager {
                     .find(|conn| conn.match_dst(dst.clone()))
                     .cloned()
             })
-    }
-
-    #[allow(dead_code)]
-    pub fn print_connections(&self) {
-        let cluster_map = self.cluster_connections.read().unwrap_or_else(|e| e.into_inner());
-        
-        tracing::debug!("=== Connection Manager Stats ===");
-        tracing::debug!("Total clusters: {}", cluster_map.len());
-        
-        for (cluster, connections) in cluster_map.iter() {
-            tracing::debug!("Cluster '{}': {} connections", cluster, connections.len());
-            for conn in connections {
-                tracing::debug!("  - {} ({})", 
-                    conn.client_config.identity,
-                    conn.client_config.private_ip);
-            }
-        }
     }
 }
