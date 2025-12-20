@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
 use crate::codec::frame::Frame::HandshakeReply;
 use crate::crypto::Block;
-use crate::network::{ConnectionMeta};
+use crate::network::{ConnectionMeta, TCPListenerConfig};
 use crate::network::connection_manager::ConnectionManager;
 use crate::network::{Connection, create_listener, ListenerConfig};
 use crate::server::client_manager::ClientManager;
@@ -33,9 +33,11 @@ impl Server {
 
 impl Server {
     pub async fn run(&mut self) -> crate::Result<()> {
-        let listener = create_listener("tcp", ListenerConfig{
+        // only for tcp now, may support multi listener type
+        let listener_config = ListenerConfig::TCP(TCPListenerConfig {
             listen_addr: self.server_config.listen_addr.clone(),
-        }, self.block.clone());
+        });
+        let listener = create_listener(listener_config, self.block.clone());
 
         let mut listener = match listener {
             Ok(listener) => listener,
@@ -45,6 +47,12 @@ impl Server {
         };
 
         let mut on_conn_rx = listener.subscribe_on_conn().await?;
+        tokio::spawn(async move {
+            let err = listener.listen_and_serve().await;
+            if err.is_err() {
+                tracing::error!("Server listening error: {:?}", err);
+            }
+        });
 
         loop {
             tokio::select! {

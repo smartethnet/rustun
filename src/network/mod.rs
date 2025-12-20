@@ -12,6 +12,7 @@ use std::sync::Arc;
 use ipnet::IpNet;
 use tokio::sync::mpsc;
 use crate::crypto::Block;
+use crate::network::ListenerConfig::TCP;
 
 /// Network connection abstraction for reading/writing frames
 /// 
@@ -159,30 +160,31 @@ impl Display for ConnectionMeta {
     }
 }
 
-/// Configuration for network listener
-pub struct ListenerConfig {
+/// Configuration for tcp listener
+pub struct TCPListenerConfig {
     /// Address to bind the listener to (e.g., "0.0.0.0:8080")
     pub(crate) listen_addr: String,
+}
+
+/// Configuration for network listener
+pub enum  ListenerConfig {
+    TCP(TCPListenerConfig),
 }
 
 /// Create a listener based on protocol type
 /// 
 /// # Arguments
-/// - `protocol` - Protocol type ("tcp", "udp", etc.)
 /// - `config` - Listener configuration
 /// - `block` - Crypto block
 /// 
 /// # Returns
 /// - `Ok(Box<dyn Listener>)` - Created listener
 /// - `Err` - Unsupported protocol or configuration error
-pub fn create_listener(protocol: &str, config: ListenerConfig, block: Arc<Box<dyn Block>>)
+pub fn create_listener(config: ListenerConfig, block: Arc<Box<dyn Block>>)
                                 -> crate::Result<Box<dyn Listener>> {
-    match protocol {
-        "tcp"=> {
+    match config {
+        TCP(config) => {
             Ok(Box::new(TCPListener::new(config.listen_addr, block)))
-        }
-        _ => {
-            Err("unsupported protocol".into())
         }
     }
 }

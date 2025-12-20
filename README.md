@@ -89,7 +89,7 @@ chacha20poly1305 = "your-secret-key-here"
 # xor = "rustun"
 
 # Or no encryption
-# plain = true
+# crypto_config = plain
 
 [route_config]
 routes_file = "./etc/routes.json"
@@ -402,7 +402,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ```bash
 # Clone the repository
-git clone https://github.com/ICKelin/rustun.git
+git clone https://github.com/smartethnet/rustun.git
 cd rustun
 
 # Install development dependencies
