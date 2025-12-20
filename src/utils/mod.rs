@@ -1,10 +1,9 @@
+use std::net::Ipv6Addr;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
-use std::net::Ipv6Addr;
 
-pub mod sys_route;
 pub mod device;
-
+pub mod sys_route;
 
 pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
     tracing::subscriber::set_global_default(
@@ -28,14 +27,14 @@ pub fn get_ipv6() -> Option<String> {
         "https://ifconfig.co",
         "https://ipv6.icanhazip.com",
     ];
-    
+
     for api in &apis {
         if let Ok(ipv6) = fetch_ipv6_from_url(api) {
             tracing::info!("Retrieved public IPv6 from {}: {}", api, ipv6);
             return Some(ipv6);
         }
     }
-    
+
     None
 }
 
@@ -44,11 +43,11 @@ fn fetch_ipv6_from_url(url: &str) -> Result<String, Box<dyn std::error::Error>> 
         .timeout(std::time::Duration::from_secs(5))
         .call()?
         .into_string()?;
-    
+
     let ipv6_str = response.trim();
-    
+
     // Validate it's a proper IPv6 address
     ipv6_str.parse::<Ipv6Addr>()?;
-    
+
     Ok(ipv6_str.to_string())
 }

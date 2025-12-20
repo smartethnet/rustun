@@ -1,7 +1,7 @@
-use std::fs;
-use serde::Deserialize;
 use crate::crypto::CryptoConfig;
 use crate::server::client_manager::ClientConfig;
+use serde::Deserialize;
+use std::fs;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

@@ -17,10 +17,16 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new(config: DeviceConfig,
-               inbound_tx: mpsc::Sender<Vec<u8>>,
-               outbound_rx: mpsc::Receiver<Vec<u8>>) -> Self {
-        Self { config, inbound_tx, outbound_rx }
+    pub fn new(
+        config: DeviceConfig,
+        inbound_tx: mpsc::Sender<Vec<u8>>,
+        outbound_rx: mpsc::Receiver<Vec<u8>>,
+    ) -> Self {
+        Self {
+            config,
+            inbound_tx,
+            outbound_rx,
+        }
     }
 
     pub async fn run(&mut self) -> crate::Result<()> {
@@ -37,7 +43,7 @@ impl Device {
             config.ensure_root_privileges(true);
         });
 
-        let mut dev = match tun::create_as_async(&config){
+        let mut dev = match tun::create_as_async(&config) {
             Ok(dev) => dev,
             Err(e) => {
                 return Err(e.into());
@@ -80,7 +86,10 @@ pub struct DeviceHandler {
 
 impl DeviceHandler {
     pub fn new() -> Self {
-        Self{inbound_rx: None, outbound_tx: None}
+        Self {
+            inbound_rx: None,
+            outbound_tx: None,
+        }
     }
 
     pub fn run(&mut self, cfg: DeviceConfig) -> crate::Result<()> {
@@ -107,7 +116,7 @@ impl DeviceHandler {
             None => {
                 tracing::error!("device handler recv none");
                 return None;
-            },
+            }
         };
 
         inbound_rx.recv().await
@@ -128,4 +137,3 @@ impl DeviceHandler {
         }
     }
 }
-

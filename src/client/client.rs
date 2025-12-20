@@ -1,12 +1,12 @@
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
+use crate::crypto::Block;
+use crate::network::Connection;
+use crate::network::tcp_connection::TcpConnection;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc};
-use tokio::time::{interval, Duration};
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
-use crate::crypto::Block;
-use crate::network::{Connection};
-use crate::network::tcp_connection::TcpConnection;
+use tokio::sync::mpsc;
+use tokio::time::{Duration, interval};
 
 #[derive(Clone)]
 pub struct ClientConfig {
@@ -26,11 +26,18 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(cfg: ClientConfig,
-               outbound_rx: mpsc::Receiver<Frame>,
-               inbound_tx: mpsc::Sender<Frame>,
-               block: Arc<Box<dyn Block>>) -> Self {
-        Self { cfg, outbound_rx, inbound_tx, block}
+    pub fn new(
+        cfg: ClientConfig,
+        outbound_rx: mpsc::Receiver<Frame>,
+        inbound_tx: mpsc::Sender<Frame>,
+        block: Arc<Box<dyn Block>>,
+    ) -> Self {
+        Self {
+            cfg,
+            outbound_rx,
+            inbound_tx,
+            block,
+        }
     }
 
     pub async fn run(&mut self, conn: &mut TcpConnection) -> crate::Result<()> {
@@ -108,16 +115,17 @@ impl Client {
             Ok(stream) => {
                 let conn = TcpConnection::new(stream, self.block.clone());
                 Ok(conn)
-            },
+            }
             Err(e) => Err(e.into()),
         }
     }
 
     async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<HandshakeReplyFrame> {
-        conn.write_frame(Frame::Handshake(HandshakeFrame{
+        conn.write_frame(Frame::Handshake(HandshakeFrame {
             identity: self.cfg.identity.clone(),
             ipv6: self.cfg.ipv6.clone(),
-        })).await?;
+        }))
+        .await?;
 
         let frame = conn.read_frame().await?;
         if let Frame::HandshakeReply(frame) = frame {
@@ -148,7 +156,12 @@ impl ClientHandler {
     pub fn run_client(&mut self, on_ready: mpsc::Sender<HandshakeReplyFrame>) {
         let (outbound_tx, outbound_rx) = mpsc::channel(self.cfg.outbound_buffer_size);
         let (inbound_tx, inbound_rx) = mpsc::channel(self.cfg.outbound_buffer_size);
-        let mut client = Client::new(self.cfg.clone(), outbound_rx, inbound_tx, self.block.clone());
+        let mut client = Client::new(
+            self.cfg.clone(),
+            outbound_rx,
+            inbound_tx,
+            self.block.clone(),
+        );
 
         tokio::spawn(async move {
             loop {
@@ -183,40 +196,29 @@ impl ClientHandler {
         self.inbound_rx = Some(inbound_rx);
     }
 
-    pub async fn send_frame(&mut self, frame: Frame) ->crate::Result<()> {
+    pub async fn send_frame(&mut self, frame: Frame) -> crate::Result<()> {
         let outbound_tx = match self.outbound_tx {
             Some(ref tx) => tx,
-            None => {
-                return Err("device => server channel closed".into())
-            },
+            None => return Err("device => server channel closed".into()),
         };
 
         let result = outbound_tx.send(frame).await;
         match result {
             Ok(()) => Ok(()),
-            Err(e) => {
-                Err(format!("device=> server fail {:?}", e).into())
-            },
+            Err(e) => Err(format!("device=> server fail {:?}", e).into()),
         }
-
     }
 
-    pub async fn recv_frame(&mut self) ->crate::Result<Frame> {
+    pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
         let inbound_rx = match self.inbound_rx {
             Some(ref mut rx) => rx,
-            None => return {
-                Err("server => device channel closed".into())
-            },
+            None => return Err("server => device channel closed".into()) ,
         };
 
         let result = inbound_rx.recv().await;
         match result {
-            Some(frame) => {
-                Ok(frame)
-            },
-            None => {
-                Err("server => device fail for closed channel".into())
-            }
+            Some(frame) => Ok(frame),
+            None => Err("server => device fail for closed channel".into()),
         }
     }
 }

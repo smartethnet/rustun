@@ -1,5 +1,5 @@
 //! Frame parser and serializer
-//! 
+//!
 //! This module handles the serialization (marshaling) and deserialization (unmarshaling)
 //! of VPN protocol frames. It manages the frame header format, payload encryption/decryption,
 //! and JSON serialization of frame data.
@@ -7,8 +7,8 @@
 use crate::codec::frame::*;
 use crate::crypto::Block;
 use anyhow::Context;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// Protocol magic number for frame validation
 const MAGIC: u32 = 0x91929394;
@@ -19,14 +19,14 @@ pub struct Parser;
 
 impl Parser {
     /// Unmarshals (deserializes) a frame from raw bytes
-    /// 
+    ///
     /// Parses the frame header, validates it, extracts and decrypts the payload,
     /// and deserializes it into the appropriate Frame variant.
-    /// 
+    ///
     /// # Arguments
     /// * `buf` - Raw byte buffer containing the frame
     /// * `block` - Cipher block for payload decryption
-    /// 
+    ///
     /// # Returns
     /// * `Ok((Frame, usize))` - Parsed frame and total bytes consumed
     /// * `Err` - If frame is invalid, too short, or decryption/parsing fails
@@ -59,67 +59,72 @@ impl Parser {
                 Ok((Frame::HandshakeReply(reply), total_len))
             }
 
-            FrameType::KeepAlive => {
-                Ok((Frame::KeepAlive(KeepAliveFrame {}), total_len))
-            }
+            FrameType::KeepAlive => Ok((Frame::KeepAlive(KeepAliveFrame {}), total_len)),
 
             FrameType::Data => {
-                block.decrypt(payload).map_err(FrameError::DecryptionFailed)?;
-                Ok((Frame::Data(DataFrame { payload: payload.to_vec() }), total_len))
+                block
+                    .decrypt(payload)
+                    .map_err(FrameError::DecryptionFailed)?;
+                Ok((
+                    Frame::Data(DataFrame {
+                        payload: payload.to_vec(),
+                    }),
+                    total_len,
+                ))
             }
         }
     }
 
     /// Validates frame header
-    /// 
+    ///
     /// Checks magic number, version, and ensures complete frame is in buffer.
-    /// 
+    ///
     /// # Arguments
     /// * `magic` - Magic number from header (should be 0x91929394)
     /// * `version` - Protocol version (should be 0x01)
     /// * `payload_size` - Payload length from header
     /// * `buf` - Complete buffer to verify size
     fn validate(magic: u32, version: u8, payload_size: u16, buf: &[u8]) -> bool {
-        magic == MAGIC 
-            && version == VERSION 
-            && (payload_size as usize + HDR_LEN) <= buf.len()
+        magic == MAGIC && version == VERSION && (payload_size as usize + HDR_LEN) <= buf.len()
     }
 
     /// Decrypts and deserializes JSON payload
-    /// 
+    ///
     /// Helper function to decrypt a payload and deserialize it from JSON.
     /// Used for Handshake and HandshakeReply frames.
-    /// 
+    ///
     /// # Arguments
     /// * `payload` - Encrypted payload bytes
     /// * `block` - Cipher block for decryption
-    /// 
+    ///
     /// # Returns
     /// Deserialized frame data of type T
     fn decrypt_and_deserialize<T: DeserializeOwned>(
-        payload: &mut Vec<u8>, 
-        block: &Box<dyn Block>
+        payload: &mut Vec<u8>,
+        block: &Box<dyn Block>,
     ) -> crate::Result<T> {
-        block.decrypt(payload).map_err(FrameError::DecryptionFailed)?;
+        block
+            .decrypt(payload)
+            .map_err(FrameError::DecryptionFailed)?;
         serde_json::from_slice(payload).map_err(|_| FrameError::Invalid.into())
     }
 
     /// Serializes and encrypts JSON payload
-    /// 
+    ///
     /// Helper function to serialize data to JSON and encrypt it.
     /// Used for Handshake and HandshakeReply frames.
-    /// 
+    ///
     /// # Arguments
     /// * `data` - Data to serialize
     /// * `block` - Cipher block for encryption
     /// * `context_msg` - Error context message
-    /// 
+    ///
     /// # Returns
     /// Encrypted payload bytes
     fn serialize_and_encrypt<T: Serialize>(
-        data: &T, 
+        data: &T,
         block: &Box<dyn Block>,
-        context_msg: &str
+        context_msg: &str,
     ) -> crate::Result<Vec<u8>> {
         let msg = context_msg.to_string();
         let json = serde_json::to_string(data).with_context(|| msg)?;
@@ -129,13 +134,13 @@ impl Parser {
     }
 
     /// Builds a frame header
-    /// 
+    ///
     /// Creates the 8-byte frame header with magic, version, frame type, and payload length.
-    /// 
+    ///
     /// # Arguments
     /// * `frame_type` - Type of frame
     /// * `payload_len` - Length of payload in bytes
-    /// 
+    ///
     /// # Returns
     /// Header bytes (8 bytes total)
     fn build_header(frame_type: FrameType, payload_len: u16) -> Vec<u8> {
@@ -148,36 +153,39 @@ impl Parser {
     }
 
     /// Marshals (serializes) a frame into raw bytes
-    /// 
+    ///
     /// Serializes the frame data to JSON, encrypts the payload, and builds
     /// the frame header with the complete frame structure.
-    /// 
+    ///
     /// # Arguments
     /// * `frame` - Frame to serialize
     /// * `block` - Cipher block for payload encryption
-    /// 
+    ///
     /// # Returns
     /// * `Ok(Vec<u8>)` - Complete frame bytes (header + encrypted payload)
     /// * `Err` - If serialization or encryption fails
     pub fn marshal(frame: Frame, block: &Box<dyn Block>) -> crate::Result<Vec<u8>> {
         match frame {
             Frame::Handshake(hs) => {
-                let payload = Self::serialize_and_encrypt(&hs, block, "failed to marshal handshake")?;
+                let payload =
+                    Self::serialize_and_encrypt(&hs, block, "failed to marshal handshake")?;
                 let mut buf = Self::build_header(FrameType::Handshake, payload.len() as u16);
                 buf.extend_from_slice(&payload);
                 Ok(buf)
             }
 
             Frame::HandshakeReply(reply) => {
-                let payload = Self::serialize_and_encrypt(&reply, block, "failed to marshal handshake reply")?;
+                let payload = Self::serialize_and_encrypt(
+                    &reply,
+                    block,
+                    "failed to marshal handshake reply",
+                )?;
                 let mut buf = Self::build_header(FrameType::HandshakeReply, payload.len() as u16);
                 buf.extend_from_slice(&payload);
                 Ok(buf)
             }
 
-            Frame::KeepAlive(_) => {
-                Ok(Self::build_header(FrameType::KeepAlive, 0))
-            }
+            Frame::KeepAlive(_) => Ok(Self::build_header(FrameType::KeepAlive, 0)),
 
             Frame::Data(mut data) => {
                 block.encrypt(&mut data.payload)?;
@@ -187,6 +195,4 @@ impl Parser {
             }
         }
     }
-
 }
-

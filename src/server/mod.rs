@@ -1,5 +1,4 @@
-pub mod main;
-pub mod config;
 mod client_manager;
+pub mod config;
+pub mod main;
 mod server;
-

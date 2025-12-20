@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use crate::{crypto, utils};
-use crate::server::config;
 use crate::server::client_manager::ClientManager;
-use crate::server::server::{Server};
+use crate::server::config;
+use crate::server::server::Server;
+use crate::{crypto, utils};
+use std::sync::Arc;
 
 pub async fn run_server() {
     let args = std::env::args().collect::<Vec<String>>();

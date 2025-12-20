@@ -1,15 +1,15 @@
+use clap::Parser;
 use std::sync::Arc;
 use std::time::Duration;
-use clap::Parser;
 use tokio::sync::mpsc;
 
 use crate::client::client::{ClientConfig, ClientHandler};
 use crate::client::prettylog::{log_handshake_success, log_startup_banner};
-use crate::utils::device::{DeviceConfig, DeviceHandler};
-use crate::utils::sys_route::SysRoute;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block, CryptoConfig};
 use crate::utils;
+use crate::utils::device::{DeviceConfig, DeviceHandler};
+use crate::utils::sys_route::SysRoute;
 
 const DEFAULT_MTU: u16 = 1430;
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
@@ -81,13 +81,13 @@ pub async fn run_client() {
             return;
         }
     };
-    
+
     run_event_loop(&mut handler, &mut dev).await;
 }
 
 fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
     let parts: Vec<&str> = crypto_str.splitn(2, ':').collect();
-    
+
     match parts[0].to_lowercase().as_str() {
         "plain" => Ok(CryptoConfig::Plain),
         "aes256" => {
@@ -108,7 +108,10 @@ fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
             }
             Ok(CryptoConfig::Xor(parts[1].to_string()))
         }
-        _ => anyhow::bail!("Unknown crypto method: {}. Use plain, aes256:<key>, chacha20:<key>, or xor:<key>", parts[0]),
+        _ => anyhow::bail!(
+            "Unknown crypto method: {}. Use plain, aes256:<key>, chacha20:<key>, or xor:<key>",
+            parts[0]
+        ),
     }
 }
 
@@ -140,9 +143,8 @@ fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandl
     // add sys route
     let sys_route = SysRoute::default();
     for route_item in &device_config.others {
-        if let Err(e) = sys_route.add(route_item.ciders.clone(),
-                                           device_config.private_ip.clone()) {
-            tracing::error!("Failed to add route item {:?}: {}",route_item, e);
+        if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone()) {
+            tracing::error!("Failed to add route item {:?}: {}", route_item, e);
         }
     }
     Ok(dev)
@@ -169,23 +171,29 @@ async fn run_event_loop(handler: &mut ClientHandler, dev: &mut DeviceHandler) {
 
 async fn handle_device_packet(handler: &mut ClientHandler, packet: Vec<u8>) {
     tracing::debug!("Device -> Server: {} bytes", packet.len());
-    
-    if let Err(e) = handler.send_frame(Frame::Data(DataFrame { payload: packet })).await {
+
+    if let Err(e) = handler
+        .send_frame(Frame::Data(DataFrame { payload: packet }))
+        .await
+    {
         tracing::error!("Failed to send packet to server: {}", e);
     }
 }
 
-async fn handle_server_frame(dev: &mut DeviceHandler, frame: crate::Result<Frame>) -> crate::Result<()> {
+async fn handle_server_frame(
+    dev: &mut DeviceHandler,
+    frame: crate::Result<Frame>,
+) -> crate::Result<()> {
     let frame = frame?;
-    
+
     if let Frame::Data(data_frame) = frame {
         tracing::debug!("Server -> Device: {} bytes", data_frame.payload.len());
-        
+
         dev.send(data_frame.payload).await.map_err(|e| {
             tracing::error!("Failed to write to device: {}", e);
             e
         })?;
     }
-    
+
     Ok(())
 }

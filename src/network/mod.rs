@@ -1,52 +1,52 @@
-pub mod tcp_connection;
 pub mod connection_manager;
+pub mod tcp_connection;
 pub mod tcp_listener;
 
-use std::fmt::Display;
 use crate::codec::frame::Frame;
+use crate::crypto::Block;
+use crate::network::ListenerConfig::TCP;
 use crate::network::tcp_listener::TCPListener;
 use async_trait::async_trait;
+use ipnet::IpNet;
+use std::fmt::Display;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use ipnet::IpNet;
 use tokio::sync::mpsc;
-use crate::crypto::Block;
-use crate::network::ListenerConfig::TCP;
 
 /// Network connection abstraction for reading/writing frames
-/// 
+///
 /// This trait provides a protocol-agnostic interface for connection operations.
 /// Implementations handle the underlying transport (TCP, UDP, etc.) and frame
 /// marshaling/unmarshaling with encryption/decryption.
 #[async_trait]
 pub trait Connection: Send + Sync {
     /// Read a frame from the connection
-    /// 
+    ///
     /// Blocks until a complete frame is received and decoded.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Frame)` - Successfully received and decoded frame
     /// - `Err` - Connection error or frame parsing failure
     async fn read_frame(&mut self) -> crate::Result<Frame>;
-    
+
     /// Write a frame to the connection
-    /// 
+    ///
     /// Encodes and sends the frame over the connection.
-    /// 
+    ///
     /// # Arguments
     /// - `frame` - The frame to send
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())` - Frame sent successfully
     /// - `Err` - Connection error or encoding failure
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()>;
-    
+
     /// Close the connection gracefully
     async fn close(&mut self);
-    
+
     /// Get the peer's socket address
-    /// 
+    ///
     /// # Returns
     /// - `Ok(SocketAddr)` - Peer's address
     /// - `Err` - Connection not established or closed
@@ -54,46 +54,43 @@ pub trait Connection: Send + Sync {
 }
 
 /// Network listener abstraction for accepting connections
-/// 
+///
 /// This trait provides a protocol-agnostic interface for server-side operations.
 /// Implementations handle binding to addresses and accepting new connections.
 #[async_trait]
 pub trait Listener: Send + Sync {
     /// Start listening and serving connections
-    /// 
+    ///
     /// Binds to the configured address and begins accepting connections.
     /// This is a blocking operation that runs until the listener is closed.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())` - Listener closed gracefully
     /// - `Err` - Failed to bind or accept connections
-    async fn listen_and_serve(&mut self)
-        -> crate::Result<()>;
+    async fn listen_and_serve(&mut self) -> crate::Result<()>;
 
     /// Subscribe to new connections
-    /// 
+    ///
     /// Returns a channel receiver for newly accepted connections.
     /// Each accepted connection is sent as a boxed Connection trait object.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Receiver)` - Channel for receiving new connections
     /// - `Err` - Failed to create subscription channel
-    async fn subscribe_on_conn(&mut self)
-        -> crate::Result<mpsc::Receiver<Box<dyn Connection>>>;
+    async fn subscribe_on_conn(&mut self) -> crate::Result<mpsc::Receiver<Box<dyn Connection>>>;
 
     /// Close the listener
-    /// 
+    ///
     /// Stops accepting new connections and releases the bound address.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())` - Listener closed successfully
     /// - `Err` - Error during shutdown
     async fn close(&mut self) -> crate::Result<()>;
 }
 
-
 /// Metadata for a client connection
-/// 
+///
 /// Contains routing information and configuration for a connected client,
 /// including cluster membership, network addresses, and routing CIDRs.
 #[derive(Debug, Clone)]
@@ -122,13 +119,13 @@ impl PartialEq<ConnectionMeta> for &ConnectionMeta {
 
 impl ConnectionMeta {
     /// Check if a destination IP matches this connection's routing rules
-    /// 
+    ///
     /// Returns true if the destination matches the private IP or falls
     /// within any of the configured CIDR ranges.
-    /// 
+    ///
     /// # Arguments
     /// - `dst` - Destination IP address as string
-    /// 
+    ///
     /// # Returns
     /// - `true` if destination should be routed through this connection
     /// - `false` otherwise
@@ -139,7 +136,7 @@ impl ConnectionMeta {
 
         let dst_ip = match dst.parse::<IpAddr>() {
             Ok(ip) => ip,
-            Err(_) => return false, 
+            Err(_) => return false,
         };
 
         for cidr in &self.ciders {
@@ -167,24 +164,24 @@ pub struct TCPListenerConfig {
 }
 
 /// Configuration for network listener
-pub enum  ListenerConfig {
+pub enum ListenerConfig {
     TCP(TCPListenerConfig),
 }
 
 /// Create a listener based on protocol type
-/// 
+///
 /// # Arguments
 /// - `config` - Listener configuration
 /// - `block` - Crypto block
-/// 
+///
 /// # Returns
 /// - `Ok(Box<dyn Listener>)` - Created listener
 /// - `Err` - Unsupported protocol or configuration error
-pub fn create_listener(config: ListenerConfig, block: Arc<Box<dyn Block>>)
-                                -> crate::Result<Box<dyn Listener>> {
+pub fn create_listener(
+    config: ListenerConfig,
+    block: Arc<Box<dyn Block>>,
+) -> crate::Result<Box<dyn Listener>> {
     match config {
-        TCP(config) => {
-            Ok(Box::new(TCPListener::new(config.listen_addr, block)))
-        }
+        TCP(config) => Ok(Box::new(TCPListener::new(config.listen_addr, block))),
     }
 }

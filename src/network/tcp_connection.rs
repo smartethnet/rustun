@@ -1,7 +1,7 @@
 use crate::codec::frame::Frame;
 use crate::codec::parser::Parser;
-use crate::crypto::plain::PlainBlock;
 use crate::crypto::Block;
+use crate::crypto::plain::PlainBlock;
 use crate::network::Connection;
 use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
@@ -18,7 +18,7 @@ const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// TCP connection wrapper with frame parsing and encryption
-/// 
+///
 /// Handles reading/writing frames over TCP with buffering and encryption.
 pub struct TcpConnection {
     /// Underlying TCP socket
@@ -33,12 +33,12 @@ pub struct TcpConnection {
     input_stream: BytesMut,
     /// Crypto block for encryption/decryption
     #[allow(unused)]
-    block: Arc<Box<dyn Block>>
+    block: Arc<Box<dyn Block>>,
 }
 
 impl TcpConnection {
     /// Create a new TCP connection with encryption
-    /// 
+    ///
     /// # Arguments
     /// - `socket` - Established TCP stream
     /// - `block` - Crypto block for encryption/decryption
@@ -48,18 +48,18 @@ impl TcpConnection {
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             read_timeout: DEFAULT_READ_TIMEOUT,
             input_stream: BytesMut::with_capacity(4096),
-            block
+            block,
         }
     }
 
     /// Create a TCP connection from socket with no encryption
-    /// 
+    ///
     /// Uses PlainBlock for passthrough mode (no encryption).
-    /// 
+    ///
     /// # Arguments
     /// - `socket` - Established TCP stream
     pub fn from_socket(socket: TcpStream) -> Self {
-        Self{
+        Self {
             socket,
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             read_timeout: DEFAULT_READ_TIMEOUT,
@@ -67,12 +67,12 @@ impl TcpConnection {
             block: Arc::new(Box::new(PlainBlock::new())),
         }
     }
-    
+
     /// Parse a complete frame from the input buffer
-    /// 
+    ///
     /// Attempts to parse a frame from buffered data. If successful,
     /// advances the buffer by the consumed bytes.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Some(Frame))` - Successfully parsed frame
     /// - `Ok(None)` - Incomplete data, need more bytes
@@ -83,10 +83,8 @@ impl TcpConnection {
             Ok((frame, total_len)) => {
                 self.input_stream.advance(total_len);
                 Ok(Some(frame))
-            },
-            Err(e) => {
-                Err(e.into())
             }
+            Err(e) => Err(e.into()),
         }
     }
 }
@@ -94,10 +92,10 @@ impl TcpConnection {
 #[async_trait]
 impl Connection for TcpConnection {
     /// Read a complete frame from the connection
-    /// 
+    ///
     /// Reads data from the socket into a buffer and attempts to parse
     /// complete frames. Blocks until a frame is available or error occurs.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Frame)` - Successfully received frame
     /// - `Err` - Connection error, EOF, or parse error
@@ -115,18 +113,18 @@ impl Connection for TcpConnection {
                     Err("EOF".into())
                 } else {
                     Err("connection reset by peer".into())
-                }
+                };
             }
         }
     }
 
     /// Write a frame to the connection
-    /// 
+    ///
     /// Marshals the frame with encryption and sends it over the socket.
-    /// 
+    ///
     /// # Arguments
     /// - `frame` - Frame to send
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())` - Frame sent successfully
     /// - `Err` - Marshal error or write error
@@ -144,13 +142,13 @@ impl Connection for TcpConnection {
             return Err(e.into());
         }
         if let Err(e) = self.socket.flush().await {
-            return Err(e.into())
+            return Err(e.into());
         }
         Ok(())
     }
 
     /// Close the connection gracefully
-    async fn close(&mut self)  {
+    async fn close(&mut self) {
         let _ = self.socket.shutdown().await;
     }
 

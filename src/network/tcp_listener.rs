@@ -1,19 +1,19 @@
+use crate::crypto::Block;
+use crate::network::tcp_connection::TcpConnection;
+use crate::network::{Connection, Listener};
+use async_trait::async_trait;
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
-use async_trait::async_trait;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc};
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
-use crate::crypto::Block;
-use crate::network::{Connection, Listener};
-use crate::network::tcp_connection::TcpConnection;
 
 /// Default queue size for new connection channel
 const DEFAULT_ON_CONNECTION_QUEUE: usize = 1024;
 
 /// TCP listener implementation
-/// 
+///
 /// Handles TCP connection acceptance with exponential backoff retry logic.
 pub struct TCPListener {
     /// Address to bind to
@@ -23,12 +23,12 @@ pub struct TCPListener {
     /// Channel sender for broadcasting new connections
     on_conn_tx: Option<mpsc::Sender<Box<dyn Connection>>>,
     /// Crypto Block
-    block: Arc<Box<dyn Block>>
+    block: Arc<Box<dyn Block>>,
 }
 
 impl TCPListener {
     /// Create a new TCP listener
-    /// 
+    ///
     /// # Arguments
     /// - `addr` - Address to bind (e.g., "0.0.0.0:8080")
     /// - `block` - Crypto block
@@ -42,21 +42,19 @@ impl TCPListener {
     }
 
     /// Accept a new TCP connection with exponential backoff
-    /// 
+    ///
     /// Retries on transient errors with backoff starting at 1s, doubling
     /// up to 64s before giving up. Only retries on temporary errors like
     /// too many open files.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(TcpStream)` - Accepted connection
     /// - `Err` - Fatal accept error or retries exhausted
     async fn accept(&mut self) -> crate::Result<TcpStream> {
-        let listener = self.listener.as_ref()
-            .ok_or_else(|| std::io::Error::new(
-                ErrorKind::NotConnected, 
-                "listener not initialized"
-            ))?;
-        
+        let listener = self.listener.as_ref().ok_or_else(|| {
+            std::io::Error::new(ErrorKind::NotConnected, "listener not initialized")
+        })?;
+
         let mut backoff = 1;
 
         loop {
@@ -66,7 +64,7 @@ impl TCPListener {
                     // Only retry on transient errors
                     match err.kind() {
                         ErrorKind::ConnectionAborted
-                        | ErrorKind::ConnectionReset 
+                        | ErrorKind::ConnectionReset
                         | ErrorKind::WouldBlock => {
                             if backoff > 64 {
                                 tracing::error!("Accept retry exhausted: {}", err);
@@ -90,7 +88,7 @@ impl TCPListener {
 #[async_trait]
 impl Listener for TCPListener {
     /// Bind to address and start accepting connections
-    /// 
+    ///
     /// Runs in a loop, accepting connections and sending them to subscribers
     /// via the channel. Continues accepting even if sending fails.
     async fn listen_and_serve(&mut self) -> crate::Result<()> {
@@ -121,7 +119,7 @@ impl Listener for TCPListener {
     }
 
     /// Create a channel for receiving new connections
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Receiver)` - Channel receiver for new connections
     async fn subscribe_on_conn(&mut self) -> crate::Result<Receiver<Box<dyn Connection>>> {

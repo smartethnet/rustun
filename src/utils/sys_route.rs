@@ -92,7 +92,7 @@ impl SysRoute {
     fn add_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
         // Windows route command format: route add <network> mask <netmask> <gateway>
         let (network, mask) = self.parse_cidr(dst)?;
-        
+
         let output = Command::new("route")
             .args(&["add", &network, "mask", &mask, gateway])
             .output()
@@ -108,7 +108,7 @@ impl SysRoute {
     #[cfg(target_os = "windows")]
     fn del_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
         let (network, mask) = self.parse_cidr(dst)?;
-        
+
         let output = Command::new("route")
             .args(&["delete", &network, "mask", &mask, gateway])
             .output()
@@ -129,7 +129,8 @@ impl SysRoute {
         }
 
         let network = parts[0].to_string();
-        let prefix_len: u8 = parts[1].parse()
+        let prefix_len: u8 = parts[1]
+            .parse()
             .map_err(|_| format!("Invalid prefix length: {}", parts[1]))?;
 
         // Convert prefix length to netmask
@@ -151,7 +152,10 @@ impl SysRoute {
             (mask_int & 0xFF) as u8,
         ];
 
-        Ok(format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]))
+        Ok(format!(
+            "{}.{}.{}.{}",
+            octets[0], octets[1], octets[2], octets[3]
+        ))
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

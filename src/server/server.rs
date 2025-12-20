@@ -1,13 +1,13 @@
-use std::sync::Arc;
-use tokio::sync::mpsc;
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
 use crate::codec::frame::Frame::HandshakeReply;
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
 use crate::crypto::Block;
-use crate::network::{ConnectionMeta, TCPListenerConfig};
 use crate::network::connection_manager::ConnectionManager;
-use crate::network::{Connection, create_listener, ListenerConfig};
+use crate::network::{Connection, ListenerConfig, create_listener};
+use crate::network::{ConnectionMeta, TCPListenerConfig};
 use crate::server::client_manager::ClientManager;
 use crate::server::config::ServerConfig;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
 
@@ -19,9 +19,11 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(server_config: ServerConfig,
-               client_manager: Arc<ClientManager>,
-               block: Arc<Box<dyn Block>>) -> Self {
+    pub fn new(
+        server_config: ServerConfig,
+        client_manager: Arc<ClientManager>,
+        block: Arc<Box<dyn Block>>,
+    ) -> Self {
         Server {
             server_config,
             connection_manager: Arc::new(ConnectionManager::new()),
@@ -69,9 +71,11 @@ impl Server {
         let peer_addr = conn.peer_addr().unwrap();
         tracing::debug!("new connection from {}", conn.peer_addr().unwrap());
 
-        let mut handler = Handler::new(self.connection_manager.clone(),
-                                       self.client_manager.clone(),
-                                       conn);
+        let mut handler = Handler::new(
+            self.connection_manager.clone(),
+            self.client_manager.clone(),
+            conn,
+        );
         tokio::task::spawn(async move {
             let e = handler.run().await;
             tracing::debug!("client {:?} handler stop with {:?}", peer_addr, e);
@@ -90,11 +94,13 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(connection_manager: Arc<ConnectionManager>,
-               client_manager: Arc<ClientManager>,
-               conn: Box<dyn Connection>) -> Handler {
+    pub fn new(
+        connection_manager: Arc<ConnectionManager>,
+        client_manager: Arc<ClientManager>,
+        conn: Box<dyn Connection>,
+    ) -> Handler {
         let (tx, rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
-        Self{
+        Self {
             connection_manager,
             client_manager,
             conn,
@@ -121,22 +127,27 @@ impl Handler {
         };
 
         // reply handshake with other clients info
-        let others = self.client_manager.get_cluster_clients_exclude(&hs.identity);
-        let route_items: Vec<RouteItem> = others.iter().map(|client| {
-            RouteItem {
+        let others = self
+            .client_manager
+            .get_cluster_clients_exclude(&hs.identity);
+        let route_items: Vec<RouteItem> = others
+            .iter()
+            .map(|client| RouteItem {
                 identity: client.identity.clone(),
                 private_ip: client.private_ip.clone(),
                 ciders: client.ciders.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
-        self.conn.write_frame(HandshakeReply(HandshakeReplyFrame{
-            private_ip: client_config.private_ip.clone(),
-            mask: client_config.mask.clone(),
-            gateway: client_config.gateway.clone(),
-            others: route_items,
-            ipv6: hs.ipv6,
-        })).await?;
+        self.conn
+            .write_frame(HandshakeReply(HandshakeReplyFrame {
+                private_ip: client_config.private_ip.clone(),
+                mask: client_config.mask.clone(),
+                gateway: client_config.gateway.clone(),
+                others: route_items,
+                ipv6: hs.ipv6,
+            }))
+            .await?;
 
         let meta = ConnectionMeta {
             cluster: client_config.cluster.clone(),
@@ -148,7 +159,7 @@ impl Handler {
             outbound_tx: self.outbound_tx.clone(),
         };
         tracing::debug!("handshake completed with {:?}", meta);
-        
+
         // Store cluster for routing
         self.cluster = Some(client_config.cluster.clone());
         self.connection_manager.add_connection(meta);
@@ -198,13 +209,11 @@ impl Handler {
                     Err("unexpected frame type when handshaking".into())
                 }
             }
-            Err(e) => {
-                Err(e)
-            }
+            Err(e) => Err(e),
         }
     }
 
-    async fn handle_frame(&mut self, frame: Frame){
+    async fn handle_frame(&mut self, frame: Frame) {
         match frame {
             Frame::KeepAlive(frame) => {
                 tracing::debug!("on keepalive");
@@ -234,11 +243,10 @@ impl Handler {
                         return;
                     }
                 };
-                
+
                 let dst_client = self.connection_manager.get_connection(cluster, &dst_ip);
                 if let Some(dst_client) = dst_client {
-                    let result = dst_client.outbound_tx.
-                        send(Frame::Data(frame)).await;
+                    let result = dst_client.outbound_tx.send(Frame::Data(frame)).await;
                     if result.is_err() {
                         tracing::warn!("dst client {} not online", dst_ip);
                     }
