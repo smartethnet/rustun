@@ -28,6 +28,7 @@ Another high-performance VPN tunnel implementation written in Rust.
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [Build Instructions](#build-instructions)
 - [Architecture](#architecture)
 - [Security](#security)
 - [Contributing](#contributing)
@@ -38,6 +39,7 @@ Another high-performance VPN tunnel implementation written in Rust.
 
 - Rust 1.70 or higher
 - TUN/TAP driver installed on your system
+- Docker (for cross-compilation with `cross`)
 
 ### Build from Source
 
@@ -46,7 +48,7 @@ Another high-performance VPN tunnel implementation written in Rust.
 git clone https://github.com/ICKelin/rustun.git
 cd rustun
 
-# Build release binaries
+# Build release binaries (server and client)
 cargo build --release
 
 # Binaries will be in target/release/
@@ -54,19 +56,52 @@ cargo build --release
 # - client
 ```
 
-### Cross-Compilation
+### Cross-Compilation for All Platforms
 
-For cross-platform builds:
+Use the provided build script to compile for all supported platforms:
 
 ```bash
-# Install cross
-cargo install cross
+# Install build tools
+cargo install cross --git https://github.com/cross-rs/cross
+cargo install cargo-xwin
 
-# Build for specific target
-cross build --release --target x86_64-unknown-linux-gnu
-cross build --release --target aarch64-unknown-linux-gnu
-cross build --release --target x86_64-apple-darwin
+# Run the build script
+./build.sh v1.0.0
+
+# Find binaries in dist/
+# - rustun-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
+# - rustun-v1.0.0-aarch64-unknown-linux-gnu.tar.gz
+# - rustun-v1.0.0-x86_64-unknown-linux-musl.tar.gz (static)
+# - rustun-v1.0.0-x86_64-apple-darwin.tar.gz
+# - rustun-v1.0.0-aarch64-apple-darwin.tar.gz
+# - rustun-v1.0.0-x86_64-pc-windows-msvc.zip
+# - SHA256SUMS
 ```
+
+### Supported Platforms
+
+| Platform | Architecture | Target Triple | Notes |
+|----------|-------------|---------------|-------|
+| Linux | x86_64 | `x86_64-unknown-linux-gnu` | glibc |
+| Linux | x86_64 | `x86_64-unknown-linux-musl` | static binary |
+| Linux | ARM64 | `aarch64-unknown-linux-gnu` | glibc |
+| Linux | ARM64 | `aarch64-unknown-linux-musl` | static binary |
+| macOS | Intel | `x86_64-apple-darwin` | macOS 10.12+ |
+| macOS | Apple Silicon | `aarch64-apple-darwin` | M1/M2/M3 |
+| Windows | x86_64 | `x86_64-pc-windows-msvc` | MSVC runtime |
+
+### Quick Build for Current Platform
+
+```bash
+# Build for current platform only (faster)
+./build-quick.sh v1.0.0
+
+# Or build single binary
+cargo build --release --bin server
+cargo build --release --bin client
+```
+
+For detailed build instructions, see [BUILD.md](BUILD.md).
 
 ## ⚙️ Configuration
 
@@ -382,6 +417,52 @@ sudo ufw allow 8080/tcp
 - **CPU Usage**: ~5% per 100 Mbps throughput (Intel i7)
 - **Memory**: ~20 MB per client connection
 
+## 🔨 Build Instructions
+
+### Quick Build
+
+```bash
+# Build for current platform
+cargo build --release
+
+# Or use the quick build script
+./build-quick.sh v1.0.0
+```
+
+### Cross-Platform Build
+
+Build for all supported platforms at once:
+
+```bash
+# Install required tools
+cargo install cross --git https://github.com/cross-rs/cross
+cargo install cargo-xwin
+
+# Build all platforms
+./build.sh v1.0.0
+
+# Output in dist/ directory:
+# - Linux (glibc & musl static)
+# - macOS (Intel & Apple Silicon)
+# - Windows (MSVC)
+# - SHA256 checksums
+```
+
+### Build Specific Platform
+
+```bash
+# Linux (static, no dependencies)
+cross build --release --target x86_64-unknown-linux-musl
+
+# macOS Apple Silicon
+cargo build --release --target aarch64-apple-darwin
+
+# Windows MSVC
+cargo xwin build --release --target x86_64-pc-windows-msvc
+```
+
+For detailed build instructions, troubleshooting, and CI/CD integration, see [BUILD.md](BUILD.md).
+
 ## 🗺️ Roadmap
 
 - [ ] Windows service support
@@ -393,6 +474,17 @@ sudo ufw allow 8080/tcp
 - [ ] Mobile clients (iOS/Android)
 - [ ] Docker container images
 - [ ] Kubernetes operator
+- [ ] Pre-built binary releases
+- [ ] Auto-update mechanism
+
+## 📦 Binary Releases
+
+Pre-built binaries are available for:
+- Linux (x86_64, ARM64, static musl builds)
+- macOS (Intel, Apple Silicon)
+- Windows (x86_64 MSVC)
+
+Download from [Releases](https://github.com/ICKelin/rustun/releases) or build from source.
 
 ## 🤝 Contributing
 
