@@ -3,6 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 
+[中文文档](./doc/README_CN.md) | English
+
 Another high-performance VPN tunnel implementation written in Rust.
 
 **Status: Actively Developing** 🚧
