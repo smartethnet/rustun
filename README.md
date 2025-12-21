@@ -11,10 +11,8 @@ Another high-performance VPN tunnel implementation written in Rust.
 
 ## ✨ Features
 
-- 🌍 **Multi-Platform Support** - Android, iOS, Windows, macOS, Linux
+- 🌍 **Multi-Platform Support** - Linux, macOS, Windows
 - 🏢 **Multi-Tenancy** - Cluster-based isolation for different organizations
-- 🔄 **P2P Communication** - Direct peer-to-peer tunneling
-- 🌐 **IPv6 Ready** - Full IPv6 support for modern networks
 - ⚡ **High Performance** - Asynchronous I/O with Tokio runtime
 - 🔐 **Multiple Encryption Methods**
   - **ChaCha20-Poly1305** (Default, Recommended)
@@ -25,10 +23,10 @@ Another high-performance VPN tunnel implementation written in Rust.
 ## 📋 Table of Contents
 
 - [Quick Start](#quick-start)
-- [Installation](#installation)
+- [Download](#download)
 - [Configuration](#configuration)
 - [Usage](#usage)
-- [Build Instructions](#build-instructions)
+- [Build from Source](#build-from-source)
 - [Architecture](#architecture)
 - [Security](#security)
 - [Contributing](#contributing)
@@ -37,71 +35,71 @@ Another high-performance VPN tunnel implementation written in Rust.
 
 ### Prerequisites
 
-- Rust 1.70 or higher
-- TUN/TAP driver installed on your system
-- Docker (for cross-compilation with `cross`)
+**All Platforms:**
+- TUN/TAP driver support
 
-### Build from Source
+**Windows:**
+- Download [Wintun driver](https://www.wintun.net/) (required for TUN device)
+- Administrator privileges
 
+**Linux/macOS:**
+- Root/sudo privileges (or set capabilities on Linux)
+
+### Download Pre-built Binaries
+
+**Download from [GitHub Releases](https://github.com/smartethnet/rustun/releases/latest)**
+
+Available for:
+- **Linux** - x86_64 (glibc/musl), ARM64 (glibc/musl)
+- **macOS** - Intel (x86_64), Apple Silicon (ARM64)
+- **Windows** - x86_64 (MSVC)
+
+Each release includes:
+- `server` - VPN server binary
+- `client` - VPN client binary
+- `server.toml.example` - Configuration example
+- `routes.json.example` - Routes example
+
+### Installation
+
+**Linux/macOS:**
 ```bash
-# Clone the repository
-git clone https://github.com/ICKelin/rustun.git
-cd rustun
+# Download and extract (example for Linux x86_64)
+wget https://github.com/smartethnet/rustun/releases/download/v1.0.0/rustun-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
+tar xzf rustun-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
+cd rustun-v1.0.0-x86_64-unknown-linux-gnu
 
-# Build release binaries (server and client)
-cargo build --release
-
-# Binaries will be in target/release/
-# - server
-# - client
+# Make binaries executable
+chmod +x server client
 ```
 
-### Cross-Compilation for All Platforms
-
-Use the provided build script to compile for all supported platforms:
-
-```bash
-# Install build tools
-cargo install cross --git https://github.com/cross-rs/cross
-cargo install cargo-xwin
-
-# Run the build script
-./build.sh v1.0.0
-
-# Find binaries in dist/
-# - rustun-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
-# - rustun-v1.0.0-aarch64-unknown-linux-gnu.tar.gz
-# - rustun-v1.0.0-x86_64-unknown-linux-musl.tar.gz (static)
-# - rustun-v1.0.0-x86_64-apple-darwin.tar.gz
-# - rustun-v1.0.0-aarch64-apple-darwin.tar.gz
-# - rustun-v1.0.0-x86_64-pc-windows-msvc.zip
-# - SHA256SUMS
+**Windows:**
+```powershell
+# 1. Download rustun-v1.0.0-x86_64-pc-windows-msvc.zip from releases
+# 2. Extract to a directory
+# 3. Download Wintun from https://www.wintun.net/
+# 4. Extract wintun.dll to the same directory as client.exe
 ```
 
-### Supported Platforms
+### Quick Test
 
-| Platform | Architecture | Target Triple | Notes |
-|----------|-------------|---------------|-------|
-| Linux | x86_64 | `x86_64-unknown-linux-gnu` | glibc |
-| Linux | x86_64 | `x86_64-unknown-linux-musl` | static binary |
-| Linux | ARM64 | `aarch64-unknown-linux-gnu` | glibc |
-| Linux | ARM64 | `aarch64-unknown-linux-musl` | static binary |
-| macOS | Intel | `x86_64-apple-darwin` | macOS 10.12+ |
-| macOS | Apple Silicon | `aarch64-apple-darwin` | M1/M2/M3 |
-| Windows | x86_64 | `x86_64-pc-windows-msvc` | MSVC runtime |
-
-### Quick Build for Current Platform
-
+**Start Server:**
 ```bash
-# Build for current platform only (faster)
-./build-quick.sh v1.0.0
+# Linux/macOS
+sudo ./server server.toml.example
 
-# Or build single binary
-cargo build --release --bin server
-cargo build --release --bin client
+# Windows (as Administrator)
+.\server.exe server.toml.example
 ```
 
-For detailed build instructions, see [BUILD.md](BUILD.md).
+**Connect Client:**
+```bash
+# Linux/macOS
+sudo ./client -s SERVER_IP:8080 -i client-001
+
+# Windows (as Administrator)
+.\client.exe -s SERVER_IP:8080 -i client-001
+```
 
 ## ⚙️ Configuration
 
@@ -387,12 +385,17 @@ Frame Header (8 bytes):
 
 **Issue: "Failed to initialize TUN device"**
 ```bash
-# Solution: Run with elevated privileges
+# Linux/macOS: Run with elevated privileges
 sudo ./client -s SERVER:8080 -i client-001
 
 # Or configure TUN permissions (Linux)
 sudo setcap cap_net_admin=eip ./client
 ```
+
+**Windows: "Wintun driver not found"**
+- Download Wintun from https://www.wintun.net/
+- Extract `wintun.dll` to the same directory as `client.exe`
+- Run as Administrator
 
 **Issue: "Connection failed: Connection refused"**
 ```bash
@@ -417,54 +420,38 @@ sudo ufw allow 8080/tcp
 - **CPU Usage**: ~5% per 100 Mbps throughput (Intel i7)
 - **Memory**: ~20 MB per client connection
 
-## 🔨 Build Instructions
+## 🔨 Build from Source
 
-### Quick Build
+> **Note**: For most users, we recommend downloading pre-built binaries from [Releases](https://github.com/smartethnet/rustun/releases). Only build from source if you need to modify the code or target an unsupported platform.
+
+### Prerequisites
+
+- Rust 1.70 or higher
+- Git
+
+### Build Steps
 
 ```bash
-# Build for current platform
+# Clone the repository
+git clone https://github.com/smartethnet/rustun.git
+cd rustun
+
+# Build release binaries
 cargo build --release
 
-# Or use the quick build script
-./build-quick.sh v1.0.0
+# Binaries will be in target/release/
+# - server
+# - client
 ```
 
-### Cross-Platform Build
+### Cross-Compilation
 
-Build for all supported platforms at once:
-
-```bash
-# Install required tools
-cargo install cross --git https://github.com/cross-rs/cross
-cargo install cargo-xwin
-
-# Build all platforms
-./build.sh v1.0.0
-
-# Output in dist/ directory:
-# - Linux (glibc & musl static)
-# - macOS (Intel & Apple Silicon)
-# - Windows (MSVC)
-# - SHA256 checksums
-```
-
-### Build Specific Platform
-
-```bash
-# Linux (static, no dependencies)
-cross build --release --target x86_64-unknown-linux-musl
-
-# macOS Apple Silicon
-cargo build --release --target aarch64-apple-darwin
-
-# Windows MSVC
-cargo xwin build --release --target x86_64-pc-windows-msvc
-```
-
-For detailed build instructions, troubleshooting, and CI/CD integration, see [BUILD.md](BUILD.md).
+For cross-platform builds, see [BUILD.md](BUILD.md) for detailed instructions.
 
 ## 🗺️ Roadmap
 
+- [ ] IPv6 support
+- [ ] P2P direct connection
 - [ ] Windows service support
 - [ ] systemd integration for Linux
 - [ ] Web-based management dashboard
@@ -477,14 +464,14 @@ For detailed build instructions, troubleshooting, and CI/CD integration, see [BU
 - [ ] Pre-built binary releases
 - [ ] Auto-update mechanism
 
-## 📦 Binary Releases
+## 📦 Download
 
-Pre-built binaries are available for:
+Pre-built binaries are available from [GitHub Releases](https://github.com/smartethnet/rustun/releases):
 - Linux (x86_64, ARM64, static musl builds)
 - macOS (Intel, Apple Silicon)
 - Windows (x86_64 MSVC)
 
-Download from [Releases](https://github.com/ICKelin/rustun/releases) or build from source.
+**Windows users**: Remember to download [Wintun driver](https://www.wintun.net/) separately.
 
 ## 🤝 Contributing
 
@@ -526,8 +513,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-- Issues: [GitHub Issues](https://github.com/ICKelin/rustun/issues)
-- Discussions: [GitHub Discussions](https://github.com/ICKelin/rustun/discussions)
+- Issues: [GitHub Issues](https://github.com/smartethnet/rustun/issues)
+- Discussions: [GitHub Discussions](https://github.com/smartethnet/rustun/discussions)
 
 ---
 
