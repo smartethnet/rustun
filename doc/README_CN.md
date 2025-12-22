@@ -2,8 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Website](https://img.shields.io/badge/Website-smartethnet.github.io-blue)](https://smartethnet.github.io)
 
-中文文档 | [English](../README.md)
+[🌐 官网](https://smartethnet.github.io) | 中文文档 | [English](../README.md)
 
 Rust 编写的高性能 VPN 隧道，用于实现设备互联，异地组网。
 
@@ -13,10 +14,12 @@ Rust 编写的高性能 VPN 隧道，用于实现设备互联，异地组网。
 
 ## ✨ 特性
 
-- 🌍 **多平台支持** - Linux, macOS, Windows
-- 🏢 **多租户** - 基于集群的不同组织隔离
-- ⚡ **高性能** - 基于 Tokio 运行时的异步 I/O
-- 🔐 **多种加密方法**
+- 🔓 **开源** - MIT 许可证，自由使用、修改和分发
+- 🏢 **多租户** - 基于集群的隔离，适合多团队或多地点的组织
+- 🔐 **默认安全** - AEAD 加密（ChaCha20-Poly1305）、完美前向保密、重放保护
+- 🚀 **简单易用** - 最小化配置、简洁的命令行、快速部署
+- 🌍 **跨平台** - 原生支持 Linux、macOS、Windows，提供预编译二进制文件
+- 🎯 **多种加密选项**
   - **ChaCha20-Poly1305** (默认，推荐)
   - **AES-256-GCM** (硬件加速)
   - **XOR** (轻量级，用于测试)
@@ -34,6 +37,8 @@ Rust 编写的高性能 VPN 隧道，用于实现设备互联，异地组网。
 - [贡献](#贡献)
 
 ## 🚀 快速开始
+
+> **💡 提示：** 访问我们的[官网](https://smartethnet.github.io)查看交互式演示和可视化指南！
 
 ### 前置要求
 
@@ -341,14 +346,12 @@ ping 10.0.2.2  # 从 sh-office-gw 到 sh-db-server
 
 ### 加密算法
 
-| 算法 | 密钥大小 | Nonce | Tag | 性能 | 安全性 |
-|-----------|----------|-------|-----|-------------|----------|
-| ChaCha20-Poly1305 | 256-bit | 96-bit | 128-bit | ⚡⚡⚡ | 🔒🔒🔒 |
-| AES-256-GCM | 256-bit | 96-bit | 128-bit | ⚡⚡⚡* | 🔒🔒🔒 |
-| XOR | 可变 | N/A | N/A | ⚡⚡⚡⚡ | 🔓 |
-| Plain | N/A | N/A | N/A | ⚡⚡⚡⚡ | ⛔ |
-
-\* 需要 AES-NI 硬件支持以获得最佳性能
+| 算法 | 密钥大小 | Nonce | Tag | 安全性 | 说明 |
+|-----------|----------|-------|-----|----------|------|
+| ChaCha20-Poly1305 | 256-bit | 96-bit | 128-bit | 🔒🔒🔒 | 推荐，所有平台性能优秀 |
+| AES-256-GCM | 256-bit | 96-bit | 128-bit | 🔒🔒🔒 | 支持硬件加速 (AES-NI) |
+| XOR | 可变 | N/A | N/A | 🔓 | 仅用于测试 |
+| Plain | N/A | N/A | N/A | ⛔ | 仅用于调试 |
 
 ### 安全特性
 
@@ -397,15 +400,6 @@ sudo ufw allow 8080/tcp
 - 验证客户端标识已在 `routes.json` 中配置
 - 确保加密方法与服务端配置匹配
 - 检查服务端日志以查找认证错误
-
-## 📊 性能
-
-### 基准测试（初步）
-
-- **吞吐量**：~900 Mbps（ChaCha20-Poly1305，单连接）
-- **延迟**：< 1ms 额外延迟（本地网络）
-- **CPU 使用率**：~5% 每 100 Mbps 吞吐量（Intel i7）
-- **内存**：每个客户端连接 ~20 MB
 
 ## 🔨 从源码构建
 
@@ -459,6 +453,8 @@ cargo build --release
 - Windows（x86_64 MSVC）
 
 **Windows 用户**：请记得单独下载 [Wintun 驱动](https://www.wintun.net/)。
+
+**需要帮助？** 访问我们的[官网](https://smartethnet.github.io)查看详细的安装指南和演示。
 
 ## 🤝 贡献
 

@@ -2,10 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Website](https://img.shields.io/badge/Website-smartethnet.github.io-blue)](https://smartethnet.github.io)
 
-[中文文档](./doc/README_CN.md) | English
+[🌐 Website](https://smartethnet.github.io) | [中文文档](./doc/README_CN.md) | English
 
-Another high-performance VPN tunnel implementation written in Rust.
+A high-performance VPN tunnel implementation written in Rust.
 
 **Status: Actively Developing** 🚧
 
@@ -13,10 +14,12 @@ Another high-performance VPN tunnel implementation written in Rust.
 
 ## ✨ Features
 
-- 🌍 **Multi-Platform Support** - Linux, macOS, Windows
-- 🏢 **Multi-Tenancy** - Cluster-based isolation for different organizations
-- ⚡ **High Performance** - Asynchronous I/O with Tokio runtime
-- 🔐 **Multiple Encryption Methods**
+- 🔓 **Open Source** - MIT License, free to use, modify, and distribute
+- 🏢 **Multi-Tenancy** - Cluster-based isolation, perfect for organizations with multiple teams or locations
+- 🔐 **Secure by Default** - AEAD encryption (ChaCha20-Poly1305), perfect forward secrecy, replay protection
+- 🚀 **Simple & Easy** - Minimal configuration, straightforward CLI, quick deployment
+- 🌍 **Cross-Platform** - Native support for Linux, macOS, Windows with pre-built binaries
+- 🎯 **Multiple Encryption Options**
   - **ChaCha20-Poly1305** (Default, Recommended)
   - **AES-256-GCM** (Hardware accelerated)
   - **XOR** (Lightweight, for testing)
@@ -34,6 +37,8 @@ Another high-performance VPN tunnel implementation written in Rust.
 - [Contributing](#contributing)
 
 ## 🚀 Quick Start
+
+> **💡 Tip:** Visit our [website](https://smartethnet.github.io) for an interactive demo and visual guide!
 
 ### Prerequisites
 
@@ -356,14 +361,12 @@ Frame Header (8 bytes):
 
 ### Encryption Algorithms
 
-| Algorithm | Key Size | Nonce | Tag | Performance | Security |
-|-----------|----------|-------|-----|-------------|----------|
-| ChaCha20-Poly1305 | 256-bit | 96-bit | 128-bit | ⚡⚡⚡ | 🔒🔒🔒 |
-| AES-256-GCM | 256-bit | 96-bit | 128-bit | ⚡⚡⚡* | 🔒🔒🔒 |
-| XOR | Variable | N/A | N/A | ⚡⚡⚡⚡ | 🔓 |
-| Plain | N/A | N/A | N/A | ⚡⚡⚡⚡ | ⛔ |
-
-\* Requires AES-NI hardware support for optimal performance
+| Algorithm | Key Size | Nonce | Tag | Security | Notes |
+|-----------|----------|-------|-----|----------|-------|
+| ChaCha20-Poly1305 | 256-bit | 96-bit | 128-bit | 🔒🔒🔒 | Recommended, excellent on all platforms |
+| AES-256-GCM | 256-bit | 96-bit | 128-bit | 🔒🔒🔒 | Hardware acceleration support (AES-NI) |
+| XOR | Variable | N/A | N/A | 🔓 | Testing only |
+| Plain | N/A | N/A | N/A | ⛔ | Debugging only |
 
 ### Security Features
 
@@ -412,15 +415,6 @@ sudo ufw allow 8080/tcp
 - Verify client identity is configured in `routes.json`
 - Ensure encryption method matches server configuration
 - Check server logs for authentication errors
-
-## 📊 Performance
-
-### Benchmarks (Preliminary)
-
-- **Throughput**: ~900 Mbps (ChaCha20-Poly1305, single connection)
-- **Latency**: < 1ms additional latency (local network)
-- **CPU Usage**: ~5% per 100 Mbps throughput (Intel i7)
-- **Memory**: ~20 MB per client connection
 
 ## 🔨 Build from Source
 
@@ -474,6 +468,8 @@ Pre-built binaries are available from [GitHub Releases](https://github.com/smart
 - Windows (x86_64 MSVC)
 
 **Windows users**: Remember to download [Wintun driver](https://www.wintun.net/) separately.
+
+**Need help?** Check out our [website](https://smartethnet.github.io) for detailed installation guides and demos.
 
 ## 🤝 Contributing
 
