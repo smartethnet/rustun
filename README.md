@@ -1,10 +1,23 @@
-# Rustun - A Modern VPN Tunnel in Rust
+<div align="center">
+
+<h1>🌐 Rustun</h1>
+
+<h3>A Modern VPN Tunnel in Rust</h3>
+
+<br/>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
-[![Website](https://img.shields.io/badge/Website-smartethnet.github.io-blue)](https://smartethnet.github.io)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/smartethnet/rustun/rust.yml?branch=main)](https://github.com/smartethnet/rustun/actions)
+[![Release](https://img.shields.io/github/v/release/smartethnet/rustun)](https://github.com/smartethnet/rustun/releases)
+[![Downloads](https://img.shields.io/github/downloads/smartethnet/rustun/total)](https://github.com/smartethnet/rustun/releases)
+[![Stars](https://img.shields.io/github/stars/smartethnet/rustun?style=social)](https://github.com/smartethnet/rustun)
 
-[🌐 Website](https://smartethnet.github.io) | [中文文档](./doc/README_CN.md) | English
+[🌐 Website](https://smartethnet.github.io) · [📖 Documentation](https://smartethnet.github.io) · [中文文档](./doc/README_CN.md) · [🐛 Report Bug](https://github.com/smartethnet/rustun/issues) · [✨ Request Feature](https://github.com/smartethnet/rustun/issues)
+
+</div>
+
+---
 
 A high-performance VPN tunnel implementation written in Rust.
 
@@ -12,29 +25,33 @@ A high-performance VPN tunnel implementation written in Rust.
 
 ![Architecture](./doc/arch.png)
 
-## ✨ Features
+## ✨ Key Features
 
-- 🔓 **Open Source** - MIT License, free to use, modify, and distribute
-- 🏢 **Multi-Tenancy** - Cluster-based isolation, perfect for organizations with multiple teams or locations
-- 🔐 **Secure by Default** - AEAD encryption (ChaCha20-Poly1305), perfect forward secrecy, replay protection
-- 🚀 **Simple & Easy** - Minimal configuration, straightforward CLI, quick deployment
-- 🌍 **Cross-Platform** - Native support for Linux, macOS, Windows with pre-built binaries
-- ⚡ **IPv6 P2P Direct Connection** - Automatic peer-to-peer connection with relay fallback for optimal performance
-- 🎯 **Multiple Encryption Options**
-  - **ChaCha20-Poly1305** (Default, Recommended)
-  - **AES-256-GCM** (Hardware accelerated)
-  - **XOR** (Lightweight, for testing)
-  - **Plain** (No encryption, for debugging)
+- 🔓 **Open Source** - MIT License, completely free and transparent
+- ⚡ **Simple & Fast** - One command to start: `./client -s SERVER:8080 -i client-001`
+- 🏢 **Multi-Tenant** - Cluster-based isolation for multiple teams or business units
+- 🔐 **Secure Encryption** - ChaCha20-Poly1305 (default), AES-256-GCM, XOR/Plain options
+- 🚀 **High Performance** - P2P direct connection with auto-fallback to relay mode
+- 🌍 **Cross-Platform** - Linux, macOS, Windows with pre-built binaries
 
 ## 📋 Table of Contents
 
 - [Quick Start](#quick-start)
-- [Download](#download)
+  - [Prerequisites](#prerequisites)
+  - [Download Pre-built Binaries](#download-pre-built-binaries)
+  - [Installation](#installation)
+  - [Quick Test](#quick-test)
 - [Configuration](#configuration)
+  - [Server Configuration](#server-configuration)
+  - [Client Routes Configuration](#client-routes-configuration)
 - [Usage](#usage)
-- [Build from Source](#build-from-source)
-- [Security](#security)
-- [Contributing](#contributing)
+  - [Starting the Server](#starting-the-server)
+  - [Starting a Client](#starting-a-client)
+  - [Client Command-Line Options](#client-command-line-options)
+  - [Encryption Options](#encryption-options)
+  - [P2P Direct Connection](#p2p-direct-connection)
+  - [Example: Multi-Tenant Setup](#example-multi-tenant-setup)
+- [Roadmap](#roadmap)
 
 ## 🚀 Quick Start
 
@@ -294,8 +311,6 @@ By default, all traffic goes through the relay server. Enable P2P for direct IPv
 3. Data sent via P2P when connection is active
 4. Automatic fallback to relay if P2P fails
 
-For more details, see [P2P Usage Guide](./docs/P2P_USAGE.md).
-
 ### Example: Multi-Tenant Setup
 
 #### Scenario: Two Offices (Beijing & Shanghai)
@@ -344,93 +359,6 @@ ping 10.0.2.2  # From sh-office-gw to sh-db-server
 # Beijing cannot reach Shanghai and vice versa
 ```
 
-## 🔒 Security
-
-### Encryption Algorithms
-
-| Algorithm | Key Size | Nonce | Tag | Security | Notes |
-|-----------|----------|-------|-----|----------|-------|
-| ChaCha20-Poly1305 | 256-bit | 96-bit | 128-bit | 🔒🔒🔒 | Recommended, excellent on all platforms |
-| AES-256-GCM | 256-bit | 96-bit | 128-bit | 🔒🔒🔒 | Hardware acceleration support (AES-NI) |
-| XOR | Variable | N/A | N/A | 🔓 | Testing only |
-| Plain | N/A | N/A | N/A | ⛔ | Debugging only |
-
-### Security Features
-
-✅ **AEAD Encryption** - Authenticated Encryption with Associated Data  
-✅ **Perfect Forward Secrecy** - Each session uses unique keys  
-✅ **Replay Protection** - Nonce-based protection against replay attacks  
-✅ **Cluster Isolation** - Multi-tenant security with no cross-cluster access  
-✅ **Connection Authentication** - Identity-based client authentication  
-
-### Security Best Practices
-
-1. **Use Strong Encryption**: Always use ChaCha20-Poly1305 or AES-256-GCM in production
-2. **Long Keys**: Use at least 32 characters for encryption keys
-3. **Regular Key Rotation**: Change encryption keys periodically
-4. **Firewall Rules**: Restrict server port access to known client IPs
-5. **Monitor Logs**: Enable logging and monitor for suspicious activity
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-**Issue: "Failed to initialize TUN device"**
-```bash
-# Linux/macOS: Run with elevated privileges
-sudo ./client -s SERVER:8080 -i client-001
-
-# Or configure TUN permissions (Linux)
-sudo setcap cap_net_admin=eip ./client
-```
-
-**Windows: "Wintun driver not found"**
-- Download Wintun from https://www.wintun.net/
-- Extract `wintun.dll` to the same directory as `client.exe`
-- Run as Administrator
-
-**Issue: "Connection failed: Connection refused"**
-```bash
-# Check server is running
-netstat -tuln | grep 8080
-
-# Check firewall rules
-sudo ufw allow 8080/tcp
-```
-
-**Issue: "Handshake failed"**
-- Verify client identity is configured in `routes.json`
-- Ensure encryption method matches server configuration
-- Check server logs for authentication errors
-
-## 🔨 Build from Source
-
-> **Note**: For most users, we recommend downloading pre-built binaries from [Releases](https://github.com/smartethnet/rustun/releases). Only build from source if you need to modify the code or target an unsupported platform.
-
-### Prerequisites
-
-- Rust 1.70 or higher
-- Git
-
-### Build Steps
-
-```bash
-# Clone the repository
-git clone https://github.com/smartethnet/rustun.git
-cd rustun
-
-# Build release binaries
-cargo build --release
-
-# Binaries will be in target/release/
-# - server
-# - client
-```
-
-### Cross-Compilation
-
-For cross-platform builds, see [BUILD.md](BUILD.md) for detailed instructions.
-
 ## 🗺️ Roadmap
 
 - [x] **IPv6 support** - ✅ Completed
@@ -444,49 +372,6 @@ For cross-platform builds, see [BUILD.md](BUILD.md) for detailed instructions.
 - [ ] Docker container images
 - [ ] Kubernetes operator
 - [ ] Auto-update mechanism
-
-## 📦 Download
-
-Pre-built binaries are available from [GitHub Releases](https://github.com/smartethnet/rustun/releases):
-- Linux (x86_64, ARM64, static musl builds)
-- macOS (Intel, Apple Silicon)
-- Windows (x86_64 MSVC)
-
-**Windows users**: Remember to download [Wintun driver](https://www.wintun.net/) separately.
-
-**Need help?** Check out our [website](https://smartethnet.github.io) for detailed installation guides and demos.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/smartethnet/rustun.git
-cd rustun
-
-# Install development dependencies
-cargo install cargo-watch cargo-edit
-
-# Run in development mode with auto-reload
-cargo watch -x 'run --bin server'
-```
-
-### Code Style
-
-```bash
-# Format code
-cargo fmt
-
-# Lint code
-cargo clippy -- -D warnings
-```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
