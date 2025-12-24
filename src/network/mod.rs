@@ -4,14 +4,16 @@ pub mod tcp_listener;
 
 use crate::codec::frame::Frame;
 use crate::crypto::Block;
-use crate::network::ListenerConfig::TCP;
+use crate::network::tcp_connection::TcpConnection;
 use crate::network::tcp_listener::TCPListener;
+use crate::network::ListenerConfig::TCP;
 use async_trait::async_trait;
 use ipnet::IpNet;
 use std::fmt::Display;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 
 /// Network connection abstraction for reading/writing frames
@@ -41,6 +43,8 @@ pub trait Connection: Send + Sync {
     /// - `Ok(())` - Frame sent successfully
     /// - `Err` - Connection error or encoding failure
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()>;
+
+    // async fn send_frame_to(&mut self, frame: &Frame, to: SocketAddr) -> crate::Result<()>;
 
     /// Close the connection gracefully
     async fn close(&mut self);
@@ -109,6 +113,9 @@ pub struct ConnectionMeta {
     pub ciders: Vec<String>,
     /// Channel for sending outbound frames to this client
     pub(crate) outbound_tx: mpsc::Sender<Frame>,
+    /// ipv6
+    pub ipv6: String,
+    pub port: u16,
 }
 
 impl PartialEq<ConnectionMeta> for &ConnectionMeta {
@@ -157,7 +164,7 @@ impl Display for ConnectionMeta {
     }
 }
 
-/// Configuration for tcp listener
+/// Configuration for TCP listener
 pub struct TCPListenerConfig {
     /// Address to bind the listener to (e.g., "0.0.0.0:8080")
     pub(crate) listen_addr: String,
@@ -171,8 +178,8 @@ pub enum ListenerConfig {
 /// Create a listener based on protocol type
 ///
 /// # Arguments
-/// - `config` - Listener configuration
-/// - `block` - Crypto block
+/// - `config` - Listener configuration (TCP or UDP)
+/// - `block` - Crypto block for encryption/decryption
 ///
 /// # Returns
 /// - `Ok(Box<dyn Listener>)` - Created listener
@@ -183,5 +190,29 @@ pub fn create_listener(
 ) -> crate::Result<Box<dyn Listener>> {
     match config {
         TCP(config) => Ok(Box::new(TCPListener::new(config.listen_addr, block))),
+    }
+}
+
+pub struct TCPConnectionConfig {
+    pub(crate) server_addr: String
+}
+
+pub enum ConnectionConfig {
+    TCP(TCPConnectionConfig),
+}
+
+pub async fn create_connection(config: ConnectionConfig,
+                               block: Arc<Box<dyn Block>>,
+) -> crate::Result<Box<dyn Connection>> {
+    match config {
+        ConnectionConfig::TCP(config) => {
+            match TcpStream::connect(&config.server_addr).await {
+                Ok(stream) => {
+                    let conn = TcpConnection::new(stream, block.clone());
+                    Ok(Box::new(conn))
+                }
+                Err(e) => Err(e.into()),
+            }
+        }
     }
 }

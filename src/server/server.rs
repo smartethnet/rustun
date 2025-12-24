@@ -2,8 +2,8 @@ use crate::codec::frame::Frame::HandshakeReply;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
 use crate::crypto::Block;
 use crate::network::connection_manager::ConnectionManager;
-use crate::network::{Connection, ListenerConfig, create_listener};
-use crate::network::{ConnectionMeta, TCPListenerConfig};
+use crate::network::{Connection, ListenerConfig, create_listener, TCPListenerConfig};
+use crate::network::{ConnectionMeta};
 use crate::server::client_manager::ClientManager;
 use crate::server::config::ServerConfig;
 use std::sync::Arc;
@@ -127,17 +127,7 @@ impl Handler {
         };
 
         // reply handshake with other clients info
-        let others = self
-            .client_manager
-            .get_cluster_clients_exclude(&hs.identity);
-        let route_items: Vec<RouteItem> = others
-            .iter()
-            .map(|client| RouteItem {
-                identity: client.identity.clone(),
-                private_ip: client.private_ip.clone(),
-                ciders: client.ciders.clone(),
-            })
-            .collect();
+        let route_items = self.build_others(client_config.cluster.as_str(), &hs.identity);
 
         self.conn
             .write_frame(HandshakeReply(HandshakeReplyFrame {
@@ -145,7 +135,7 @@ impl Handler {
                 mask: client_config.mask.clone(),
                 gateway: client_config.gateway.clone(),
                 others: route_items,
-                ipv6: hs.ipv6,
+                ipv6: hs.ipv6.clone(),
             }))
             .await?;
 
@@ -157,6 +147,8 @@ impl Handler {
             gateway: client_config.gateway.clone(),
             ciders: client_config.ciders.clone(),
             outbound_tx: self.outbound_tx.clone(),
+            ipv6: hs.ipv6.clone(),
+            port: hs.port,
         };
         tracing::debug!("handshake completed with {:?}", meta);
 
@@ -211,6 +203,39 @@ impl Handler {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// build others client's info
+    ///
+    /// - find ipv6 from online connection
+    /// - filter private and ciders from client configuration
+    ///
+    fn build_others(&self, cluster: &str, my_id: &String) -> Vec<RouteItem> {
+        // reply handshake with other clients info
+        let others = self
+            .client_manager
+            .get_cluster_clients_exclude(my_id);
+        others
+            .iter()
+            .map(|client| {
+                let (ipv6, port) = match self.connection_manager
+                    .get_connection_by_identity(cluster, &client.identity) {
+                    Some(c) => {
+                        (c.ipv6, c.port)
+                    },
+                    None => {
+                        ("".to_string(), 0)
+                    }
+                };
+                RouteItem {
+                    identity: client.identity.clone(),
+                    private_ip: client.private_ip.clone(),
+                    ciders: client.ciders.clone(),
+                    ipv6,
+                    port,
+                }
+            })
+            .collect()
     }
 
     async fn handle_frame(&mut self, frame: Frame) {

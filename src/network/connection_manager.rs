@@ -73,4 +73,17 @@ impl ConnectionManager {
                 .cloned()
         })
     }
+
+    pub fn get_connection_by_identity(&self, cluster: &str, identity: &String) -> Option<ConnectionMeta> {
+        let guard = self
+            .cluster_connections
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        guard.get(cluster).and_then(|connections| {
+            connections
+                .iter()
+                .find(|conn| conn.identity ==*identity)
+                .cloned()
+        })
+    }
 }

@@ -19,6 +19,7 @@ A high-performance VPN tunnel implementation written in Rust.
 - 🔐 **Secure by Default** - AEAD encryption (ChaCha20-Poly1305), perfect forward secrecy, replay protection
 - 🚀 **Simple & Easy** - Minimal configuration, straightforward CLI, quick deployment
 - 🌍 **Cross-Platform** - Native support for Linux, macOS, Windows with pre-built binaries
+- ⚡ **IPv6 P2P Direct Connection** - Automatic peer-to-peer connection with relay fallback for optimal performance
 - 🎯 **Multiple Encryption Options**
   - **ChaCha20-Poly1305** (Default, Recommended)
   - **AES-256-GCM** (Hardware accelerated)
@@ -32,7 +33,6 @@ A high-performance VPN tunnel implementation written in Rust.
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Build from Source](#build-from-source)
-- [Architecture](#architecture)
 - [Security](#security)
 - [Contributing](#contributing)
 
@@ -72,9 +72,9 @@ Each release includes:
 **Linux/macOS:**
 ```bash
 # Download and extract (example for Linux x86_64)
-wget https://github.com/smartethnet/rustun/releases/download/v1.0.0/rustun-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
-tar xzf rustun-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
-cd rustun-v1.0.0-x86_64-unknown-linux-gnu
+wget https://github.com/smartethnet/rustun/releases/download/0.0.1/rustun-0.0.1-x86_64-unknown-linux-gnu.tar.gz
+tar xzf rustun-0.0.1-x86_64-unknown-linux-gnu.tar.gz
+cd rustun-0.0.1-x86_64-unknown-linux-gnu
 
 # Make binaries executable
 chmod +x server client
@@ -82,7 +82,7 @@ chmod +x server client
 
 **Windows:**
 ```powershell
-# 1. Download rustun-v1.0.0-x86_64-pc-windows-msvc.zip from releases
+# 1. Download rustun-0.0.1-x86_64-pc-windows-msvc.zip from releases
 # 2. Extract to a directory
 # 3. Download Wintun from https://www.wintun.net/
 # 4. Extract wintun.dll to the same directory as client.exe
@@ -234,6 +234,10 @@ Options:
           Encryption method: plain, aes256:<key>, chacha20:<key>, or xor:<key>
           [default: chacha20:rustun]
 
+      --enable-p2p
+          Enable P2P direct connection via IPv6
+          (disabled by default, uses relay only)
+
       --keepalive-interval <KEEPALIVE_INTERVAL>
           Keep-alive interval in seconds
           [default: 10]
@@ -264,6 +268,33 @@ Options:
 # Plain (No encryption, debugging only)
 ./client -s SERVER:8080 -i client-001 -c plain
 ```
+
+### P2P Direct Connection
+
+By default, all traffic goes through the relay server. Enable P2P for direct IPv6 connections between clients:
+
+```bash
+# Enable P2P direct connection
+./client -s SERVER:8080 -i client-001 --enable-p2p
+```
+
+**P2P Benefits:**
+- 🚀 Lower latency (direct peer-to-peer)
+- 📉 Reduced server bandwidth usage
+- ⚡ Automatic fallback to relay if P2P fails
+
+**Requirements:**
+- Both clients must have IPv6 connectivity
+- Both clients must use `--enable-p2p` flag
+- UDP port 51258 must be accessible
+
+**How it works:**
+1. Clients exchange IPv6 addresses via server
+2. Keepalive packets establish direct connection
+3. Data sent via P2P when connection is active
+4. Automatic fallback to relay if P2P fails
+
+For more details, see [P2P Usage Guide](./docs/P2P_USAGE.md).
 
 ### Example: Multi-Tenant Setup
 
@@ -312,50 +343,6 @@ ping 10.0.2.2  # From sh-office-gw to sh-db-server
 # Cross-cluster communication is isolated
 # Beijing cannot reach Shanghai and vice versa
 ```
-
-## 🏗️ Architecture
-
-### Network Topology
-
-```
-┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│  Client A   │◄───────►│   Server    │◄───────►│  Client B   │
-│  (Beijing)  │         │  (Central)  │         │  (Shanghai) │
-└─────────────┘         └─────────────┘         └─────────────┘
-      │                                                 │
-      │ Virtual IP: 10.0.1.1                Virtual IP: 10.0.2.1
-      │                                                 │
-   ┌──▼──────────────┐                      ┌───────────▼──────┐
-   │ LAN: 192.168.1.0│                      │ LAN: 192.168.10.0│
-   └─────────────────┘                      └──────────────────┘
-```
-
-### Components
-
-- **Server**: Central relay handling all client connections
-- **Client**: Edge node connecting to the server
-- **TUN Device**: Virtual network interface for packet tunneling
-- **Crypto Layer**: Encryption/decryption of all traffic
-- **Route Manager**: Dynamic routing table management
-
-### Frame Protocol
-
-```
-Frame Header (8 bytes):
-┌──────────────┬─────────┬──────┬─────────────────┐
-│ Magic (4B)   │ Ver (1B)│ Type │  Payload Len    │
-│ 0x91929394   │  0x01   │ (1B) │     (2B)        │
-└──────────────┴─────────┴──────┴─────────────────┘
-                                  │
-                                  ▼
-                          Encrypted Payload
-```
-
-**Frame Types:**
-- `0x01`: Handshake (client authentication)
-- `0x02`: KeepAlive (connection health check)
-- `0x03`: Data (tunneled IP packets)
-- `0x04`: HandshakeReply (server configuration response)
 
 ## 🔒 Security
 
@@ -446,18 +433,16 @@ For cross-platform builds, see [BUILD.md](BUILD.md) for detailed instructions.
 
 ## 🗺️ Roadmap
 
-- [ ] IPv6 support
-- [ ] P2P direct connection
+- [x] **IPv6 support** - ✅ Completed
+- [x] **P2P direct connection** - ✅ Completed (IPv6 P2P with auto fallback)
 - [ ] Windows service support
 - [ ] systemd integration for Linux
 - [ ] Web-based management dashboard
 - [ ] Dynamic route updates without restart
-- [ ] UDP transport support
 - [ ] QUIC protocol support
 - [ ] Mobile clients (iOS/Android)
 - [ ] Docker container images
 - [ ] Kubernetes operator
-- [ ] Pre-built binary releases
 - [ ] Auto-update mechanism
 
 ## 📦 Download

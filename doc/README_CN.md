@@ -19,6 +19,7 @@ Rust 编写的高性能 VPN 隧道，用于实现设备互联，异地组网。
 - 🔐 **默认安全** - AEAD 加密（ChaCha20-Poly1305）、完美前向保密、重放保护
 - 🚀 **简单易用** - 最小化配置、简洁的命令行、快速部署
 - 🌍 **跨平台** - 原生支持 Linux、macOS、Windows，提供预编译二进制文件
+- ⚡ **IPv6 P2P 直连** - 自动点对点连接，中继降级，性能最优
 - 🎯 **多种加密选项**
   - **ChaCha20-Poly1305** (默认，推荐)
   - **AES-256-GCM** (硬件加速)
@@ -32,7 +33,6 @@ Rust 编写的高性能 VPN 隧道，用于实现设备互联，异地组网。
 - [配置](#配置)
 - [使用说明](#使用说明)
 - [从源码构建](#从源码构建)
-- [架构](#架构)
 - [安全性](#安全性)
 - [贡献](#贡献)
 
@@ -234,6 +234,10 @@ Rustun VPN Client
           加密方式: plain, aes256:<key>, chacha20:<key>, 或 xor:<key>
           [默认: chacha20:rustun]
 
+      --enable-p2p
+          启用 P2P IPv6 直连
+          (默认禁用，仅使用中继)
+
       --keepalive-interval <KEEPALIVE_INTERVAL>
           保活间隔（秒）
           [默认: 10]
@@ -264,6 +268,33 @@ Rustun VPN Client
 # Plain（无加密，仅用于调试）
 ./client -s SERVER:8080 -i client-001 -c plain
 ```
+
+### P2P 直连
+
+默认情况下，所有流量都通过中继服务器。启用 P2P 可实现客户端之间的 IPv6 直连：
+
+```bash
+# 启用 P2P 直连
+./client -s SERVER:8080 -i client-001 --enable-p2p
+```
+
+**P2P 优势：**
+- 🚀 更低延迟（点对点直连）
+- 📉 减少服务器带宽消耗
+- ⚡ P2P 失败时自动降级到中继
+
+**要求：**
+- 双方客户端都需要 IPv6 连接
+- 双方客户端都需要使用 `--enable-p2p` 标志
+- UDP 端口 51258 需要可访问
+
+**工作原理：**
+1. 客户端通过服务器交换 IPv6 地址
+2. Keepalive 数据包建立直连
+3. 连接激活时通过 P2P 发送数据
+4. P2P 失败时自动降级到中继
+
+更多详情，请参阅 [P2P 使用指南](../docs/P2P_USAGE.md)。
 
 ### 示例：多租户设置
 
@@ -431,18 +462,16 @@ cargo build --release
 
 ## 🗺️ 路线图
 
-- [ ] IPv6 支持
-- [ ] P2P 直连
+- [x] **IPv6 支持** - ✅ 已完成
+- [x] **P2P 直连** - ✅ 已完成（IPv6 P2P 带自动降级）
 - [ ] Windows 服务支持
 - [ ] Linux systemd 集成
 - [ ] 基于 Web 的管理面板
 - [ ] 无需重启的动态路由更新
-- [ ] UDP 传输支持
 - [ ] QUIC 协议支持
 - [ ] 移动客户端（iOS/Android）
 - [ ] Docker 容器镜像
 - [ ] Kubernetes operator
-- [ ] 预编译二进制发布
 - [ ] 自动更新机制
 
 ## 📦 下载

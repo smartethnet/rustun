@@ -121,6 +121,7 @@ pub struct HandshakeFrame {
 
     /// Public IPv6
     pub ipv6: String,
+    pub port: u16,
 }
 
 /// Handshake reply frame sent by server in response to client handshake
@@ -128,7 +129,7 @@ pub struct HandshakeFrame {
 /// Contains the network configuration for the client and information about
 /// other peers in the same cluster. This enables the client to set up routes
 /// and communicate with other VPN nodes.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HandshakeReplyFrame {
     /// Private IP address assigned to this client
     ///
@@ -161,7 +162,7 @@ pub struct HandshakeReplyFrame {
 ///
 /// Describes a single peer in the VPN cluster, including its identity,
 /// virtual IP address, and the CIDR ranges it can route to.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteItem {
     /// Unique identifier of the peer
     pub identity: String,
@@ -174,6 +175,11 @@ pub struct RouteItem {
     /// Example: ["192.168.1.0/24", "10.0.0.0/8"]
     /// Traffic destined for these ranges will be routed through this peer
     pub ciders: Vec<String>,
+
+    /// IPv6 is public ip address of ther peer
+    pub ipv6: String,
+
+    pub port: u16,
 }
 
 /// Keep-alive frame for connection health monitoring

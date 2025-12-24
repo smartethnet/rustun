@@ -32,7 +32,6 @@ pub struct TcpConnection {
     /// Input buffer for incomplete frames
     input_stream: BytesMut,
     /// Crypto block for encryption/decryption
-    #[allow(unused)]
     block: Arc<Box<dyn Block>>,
 }
 

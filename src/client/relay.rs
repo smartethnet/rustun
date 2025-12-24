@@ -1,15 +1,19 @@
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
-use crate::network::Connection;
-use crate::network::tcp_connection::TcpConnection;
+use crate::network::{create_connection, Connection, ConnectionConfig, TCPConnectionConfig};
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, interval};
+use crate::client::main::Args;
+use crate::client::prettylog::log_handshake_success;
+use crate::utils;
+
+const OUTBOUND_BUFFER_SIZE: usize = 1000;
+const CONFIG_CHANNEL_SIZE: usize = 10;
 
 #[derive(Clone)]
-pub struct ClientConfig {
+pub struct RelayClientConfig {
     pub server_addr: String,
     pub keepalive_interval: Duration,
     pub outbound_buffer_size: usize,
@@ -18,16 +22,16 @@ pub struct ClientConfig {
     pub ipv6: String,
 }
 
-pub struct Client {
-    cfg: ClientConfig,
+pub struct RelayClient {
+    cfg: RelayClientConfig,
     outbound_rx: mpsc::Receiver<Frame>,
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
 }
 
-impl Client {
+impl RelayClient {
     pub fn new(
-        cfg: ClientConfig,
+        cfg: RelayClientConfig,
         outbound_rx: mpsc::Receiver<Frame>,
         inbound_tx: mpsc::Sender<Frame>,
         block: Arc<Box<dyn Block>>,
@@ -40,7 +44,7 @@ impl Client {
         }
     }
 
-    pub async fn run(&mut self, conn: &mut TcpConnection) -> crate::Result<()> {
+    pub async fn run(&mut self, mut conn: Box<dyn Connection>) -> crate::Result<()> {
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
         let mut keepalive_wait: u8 = 0;
         loop {
@@ -110,20 +114,21 @@ impl Client {
         Ok(())
     }
 
-    async fn connect(&self) -> crate::Result<TcpConnection> {
-        match TcpStream::connect(&self.cfg.server_addr).await {
-            Ok(stream) => {
-                let conn = TcpConnection::new(stream, self.block.clone());
-                Ok(conn)
-            }
-            Err(e) => Err(e.into()),
+    async fn connect(&self) -> crate::Result<Box<dyn Connection>> {
+        let conn = create_connection(ConnectionConfig::TCP(TCPConnectionConfig {
+            server_addr: self.cfg.server_addr.clone(),
+        }), self.block.clone()).await;
+        match conn {
+            Ok(conn) => Ok(conn),
+            Err(e) => Err(e.into())
         }
     }
 
-    async fn handshake(&self, conn: &mut TcpConnection) -> crate::Result<HandshakeReplyFrame> {
+    async fn handshake(&self, conn: &mut Box<dyn Connection>) -> crate::Result<HandshakeReplyFrame> {
         conn.write_frame(Frame::Handshake(HandshakeFrame {
             identity: self.cfg.identity.clone(),
             ipv6: self.cfg.ipv6.clone(),
+            port: 51258,
         }))
         .await?;
 
@@ -137,31 +142,33 @@ impl Client {
 }
 
 pub struct ClientHandler {
-    cfg: ClientConfig,
     outbound_tx: Option<mpsc::Sender<Frame>>,
-    inbound_rx: Option<mpsc::Receiver<Frame>>,
+    inbound_rx: mpsc::Receiver<Frame>,
+    inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
 }
 
 impl ClientHandler {
-    pub fn new(cfg: ClientConfig, block: Arc<Box<dyn Block>>) -> ClientHandler {
+    pub fn new(block: Arc<Box<dyn Block>>) -> ClientHandler {
+        let (inbound_tx, inbound_rx) = mpsc::channel(10);
         ClientHandler {
-            cfg,
             outbound_tx: None,
-            inbound_rx: None,
+            inbound_rx,
+            inbound_tx,
             block,
         }
     }
 
-    pub fn run_client(&mut self, on_ready: mpsc::Sender<HandshakeReplyFrame>) {
-        let (outbound_tx, outbound_rx) = mpsc::channel(self.cfg.outbound_buffer_size);
-        let (inbound_tx, inbound_rx) = mpsc::channel(self.cfg.outbound_buffer_size);
-        let mut client = Client::new(
-            self.cfg.clone(),
+    pub fn run_client(&mut self, cfg: RelayClientConfig,
+                      on_ready: mpsc::Sender<HandshakeReplyFrame>) {
+        let (outbound_tx, outbound_rx) = mpsc::channel(cfg.outbound_buffer_size);
+        let mut client = RelayClient::new(
+            cfg.clone(),
             outbound_rx,
-            inbound_tx,
+            self.inbound_tx.clone(),
             self.block.clone(),
         );
+        self.outbound_tx = Some(outbound_tx);
 
         tokio::spawn(async move {
             loop {
@@ -182,24 +189,22 @@ impl ClientHandler {
                         continue;
                     }
                 };
-                if let Err(e) = on_ready.send(frame).await {
+                if let Err(e) = on_ready.send(frame.clone()).await {
                     tracing::error!("on ready send fail: {}", e);
                 }
 
-                let result = client.run(&mut conn).await;
+                let result = client.run(conn).await;
 
                 tracing::warn!("run client fail {:?}, reconnecting", result);
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
         });
-        self.outbound_tx = Some(outbound_tx);
-        self.inbound_rx = Some(inbound_rx);
     }
 
     pub async fn send_frame(&mut self, frame: Frame) -> crate::Result<()> {
-        let outbound_tx = match self.outbound_tx {
-            Some(ref tx) => tx,
-            None => return Err("device => server channel closed".into()),
+        let outbound_tx = match self.outbound_tx.clone() {
+            Some(tx) => tx,
+            None => {return Err("relay connection disconnect".into())}
         };
 
         let result = outbound_tx.send(frame).await;
@@ -210,15 +215,35 @@ impl ClientHandler {
     }
 
     pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
-        let inbound_rx = match self.inbound_rx {
-            Some(ref mut rx) => rx,
-            None => return Err("server => device channel closed".into()) ,
-        };
-
-        let result = inbound_rx.recv().await;
+        let result = self.inbound_rx.recv().await;
         match result {
             Some(frame) => Ok(frame),
             None => Err("server => device fail for closed channel".into()),
         }
     }
+}
+
+pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::Result<(ClientHandler, HandshakeReplyFrame)> {
+    let ipv6 = utils::get_ipv6().unwrap_or("".to_string());
+    let client_config = RelayClientConfig {
+        server_addr: args.server.clone(),
+        keepalive_interval: Duration::from_secs(args.keepalive_interval),
+        outbound_buffer_size: OUTBOUND_BUFFER_SIZE,
+        keep_alive_thresh: args.keepalive_threshold,
+        identity: args.identity.clone(),
+        ipv6,
+    };
+
+    let mut handler = ClientHandler::new(block);
+    let (config_ready_tx, mut config_ready_rx) = mpsc::channel(CONFIG_CHANNEL_SIZE);
+    handler.run_client(client_config, config_ready_tx);
+
+    let device_config = config_ready_rx
+        .recv()
+        .await
+        .ok_or("Failed to receive device config from server")?;
+
+    log_handshake_success(&device_config);
+
+    Ok((handler, device_config))
 }

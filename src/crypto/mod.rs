@@ -99,3 +99,33 @@ pub enum CryptoConfig {
     /// Parameter: String key for XOR operations
     Xor(String),
 }
+
+pub fn parse_crypto_config(crypto_str: &str) -> anyhow::Result<CryptoConfig> {
+    let parts: Vec<&str> = crypto_str.splitn(2, ':').collect();
+
+    match parts[0].to_lowercase().as_str() {
+        "plain" => Ok(CryptoConfig::Plain),
+        "aes256" => {
+            if parts.len() < 2 {
+                anyhow::bail!("AES256 requires a key: aes256:<key>");
+            }
+            Ok(CryptoConfig::Aes256(parts[1].to_string()))
+        }
+        "chacha20" => {
+            if parts.len() < 2 {
+                anyhow::bail!("ChaCha20 requires a key: chacha20:<key>");
+            }
+            Ok(CryptoConfig::ChaCha20Poly1305(parts[1].to_string()))
+        }
+        "xor" => {
+            if parts.len() < 2 {
+                anyhow::bail!("XOR requires a key: xor:<key>");
+            }
+            Ok(CryptoConfig::Xor(parts[1].to_string()))
+        }
+        _ => anyhow::bail!(
+            "Unknown crypto method: {}. Use plain, aes256:<key>, chacha20:<key>, or xor:<key>",
+            parts[0]
+        ),
+    }
+}
