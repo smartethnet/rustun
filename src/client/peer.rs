@@ -154,7 +154,7 @@ struct PeerMeta {
     port: u16,
 
     /// Resolved socket address combining IPv6 and port ([ipv6]:port)
-    remote_addr: SocketAddr,
+    remote_addr: Option<SocketAddr>,
     
     /// Timestamp of last received packet from this peer
     ///
@@ -200,6 +200,15 @@ pub struct PeerHandler {
 
     /// Encryption/decryption block for frame marshaling
     block: Arc<Box<dyn Block>>,
+    
+    /// Local peer identity
+    identity: String,
+    
+    /// Local peer IPv6 address
+    ipv6: String,
+    
+    /// Local peer UDP port
+    port: u16,
 }
 
 impl PeerHandler {
@@ -210,10 +219,13 @@ impl PeerHandler {
     ///
     /// # Arguments
     /// * `block` - Encryption/decryption block for frame processing
+    /// * `identity` - Local peer identity
+    /// * `ipv6` - Local peer IPv6 address
+    /// * `port` - Local peer UDP port
     ///
     /// # Returns
     /// A new PeerHandler ready to be started
-    pub fn new(block: Arc<Box<dyn Block>>) -> Self {
+    pub fn new(block: Arc<Box<dyn Block>>, identity: String, ipv6: String, port: u16) -> Self {
         let (inbound_tx, inbound_rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
         Self {
             peers: Arc::new(RwLock::new(HashMap::new())),
@@ -221,6 +233,9 @@ impl PeerHandler {
             inbound_rx,
             inbound_tx,
             block,
+            identity,
+            ipv6,
+            port,
         }
     }
 
@@ -228,18 +243,18 @@ impl PeerHandler {
     ///
     /// Spawns a PeerService that handles actual socket I/O operations.
     /// After this call, the handler is ready to send/receive frames.
-    ///
-    /// # Arguments
-    /// * `bind_port` - UDP port to bind for P2P communication
+    /// The service binds to the port specified during `new()`.
     ///
     /// # Example
     /// ```rust,ignore
-    /// let mut handler = PeerHandler::new(block);
-    /// handler.run_peer(51258);  // Bind to port 51258
+    /// use crate::client::P2P_UDP_PORT;
+    /// 
+    /// let mut handler = PeerHandler::new(block, identity, ipv6, P2P_UDP_PORT);
+    /// handler.run_peer();  // Bind to the port specified in new()
     /// ```
-    pub fn run_peer(&mut self, bind_port: u16)  {
+    pub fn run_peer(&mut self)  {
         let (output_tx, output_rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
-        let mut peer_service = PeerService::new(bind_port, self.inbound_tx.clone(), output_rx);
+        let mut peer_service = PeerService::new(self.port, self.inbound_tx.clone(), output_rx);
 
         // Spawn PeerService in background task
         tokio::spawn(async move {
@@ -272,15 +287,18 @@ impl PeerHandler {
         let mut peers = self.peers.write().await;
         
         for route in routes {
-            if route.ipv6.is_empty() {
-                continue;
-            }
-            // Parse remote address from IPv6 and port
-            let remote_addr = match format!("[{}]:{}", route.ipv6, route.port).parse::<SocketAddr>() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    tracing::warn!("Invalid IPv6 address for peer {}: {}", route.identity, e);
-                    continue;
+            // Save peer although ipv6 is not set
+            // in order to update peer info if peer's ipv6 detected
+            let remote_addr = if route.ipv6.is_empty() {
+                None
+            } else {
+                // Parse remote address from IPv6 and port
+                match format!("[{}]:{}", route.ipv6, route.port).parse::<SocketAddr>() {
+                    Ok(addr) => Some(addr),
+                    Err(e) => {
+                        tracing::warn!("Invalid IPv6 address for peer {}: {}", route.identity, e);
+                        None
+                    }
                 }
             };
 
@@ -302,6 +320,49 @@ impl PeerHandler {
 
             // Send initial keepalive to probe connectivity
             let _ = self.send_keepalive_to(remote_addr);
+        }
+    }
+
+    /// Update a peer's IPv6 address and port
+    ///
+    /// Called when receiving a PeerUpdate frame from the server,
+    /// indicating that a peer's address has changed.
+    ///
+    /// # Arguments
+    /// * `identity` - Peer identity to update
+    /// * `ipv6` - New IPv6 address
+    /// * `port` - New UDP port
+    ///
+    /// # Behavior
+    /// - Updates the peer's SocketAddr in the peers map
+    /// - Resets `last_active` to None (requires new keepalive handshake)
+    /// - Sends immediate keepalive to probe new address
+    pub async fn update_peer(&mut self, identity: String, ipv6: String, port: u16) {
+        let mut peers = self.peers.write().await;
+
+        // Parse new remote address
+        if let Some(peer) = peers.get_mut(&identity) {
+            let new_addr = match format!("[{}]:{}", ipv6, port).parse::<SocketAddr>() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    tracing::warn!("Invalid new IPv6 address for peer {}: {}", identity, e);
+                    return;
+                }
+            };
+
+            tracing::info!(
+                "Updating peer {} address to [{}]:{}",
+                identity,
+                ipv6,
+                port
+            );
+
+            // Update address and reset connection state
+            peer.remote_addr = Some(new_addr);
+            peer.last_active = None; // Require new handshake
+
+            // Send immediate keepalive to new address
+            let _ = self.send_keepalive_to(Some(new_addr));
         }
     }
 
@@ -332,6 +393,9 @@ impl PeerHandler {
 
         let block = self.block.clone();
         let peers = self.peers.clone(); // Clone Arc, not the data
+        let identity = self.identity.clone();
+        let ipv6 = self.ipv6.clone();
+        let port = self.port;
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(KEEPALIVE_INTERVAL);
@@ -341,11 +405,17 @@ impl PeerHandler {
                 // Read current peer list (supports dynamic updates!)
                 let peer_addrs: Vec<SocketAddr> = {
                     let peers_guard = peers.read().await;
-                    peers_guard.values().map(|p| p.remote_addr).collect()
+                    peers_guard.values()
+                        .filter(|p| p.remote_addr.is_some())
+                        .map(|p| p.remote_addr.unwrap()).collect()
                 };
 
                 // Send keepalive to all current peers (every 10 seconds)
-                let keepalive = Frame::KeepAlive(KeepAliveFrame {});
+                let keepalive = Frame::KeepAlive(KeepAliveFrame {
+                    identity: identity.clone(),
+                    ipv6: ipv6.clone(),
+                    port,
+                });
                 if let Ok(data) = Parser::marshal(keepalive, block.as_ref()) {
                     for remote_addr in &peer_addrs {
                         if let Err(e) = outbound_tx.send((data.clone(), *remote_addr)).await {
@@ -370,13 +440,22 @@ impl PeerHandler {
     /// # Returns
     /// * `Ok(())` - Keepalive queued successfully
     /// * `Err` - Failed to marshal or send
-    fn send_keepalive_to(&self, remote_addr: SocketAddr) -> crate::Result<()> {
+    fn send_keepalive_to(&self, remote_addr: Option<SocketAddr>) -> crate::Result<()> {
+        if remote_addr.is_none() {
+            tracing::warn!("Cannot send keepalive: remote_addr not set");
+            return Ok(());
+        }
+
         let outbound_tx = self.outbound_tx.as_ref().ok_or("outbound_tx not initialized")?;
-        let keepalive = Frame::KeepAlive(KeepAliveFrame {});
+        let keepalive = Frame::KeepAlive(KeepAliveFrame {
+            identity: self.identity.clone(),
+            ipv6: self.ipv6.clone(),
+            port: self.port,
+        });
         let data = Parser::marshal(keepalive, self.block.as_ref())?;
 
         // Non-blocking send - best effort
-        let _ = outbound_tx.try_send((data, remote_addr));
+        let _ = outbound_tx.try_send((data, remote_addr.unwrap()));
         Ok(())
     }
 
@@ -408,8 +487,25 @@ impl PeerHandler {
             let (frame, _) = Parser::unmarshal(&buf, self.block.as_ref())?;
 
             match frame {
-                Frame::KeepAlive(_) => {
-                    tracing::debug!("Received keepalive from peer at {}", remote);
+                Frame::KeepAlive(ka) => {
+                    tracing::debug!("Received keepalive from peer {} at {}", ka.identity, remote);
+                    
+                    // Update peer address and last_active based on keepalive identity
+                    // This enables address learning for peers behind NAT
+                    let mut peers = self.peers.write().await;
+                    if let Some(peer) = peers.get_mut(&ka.identity) {
+                        // Learn or update remote address
+                        if peer.remote_addr.is_none() {
+                            tracing::info!(
+                                "Learned peer {} address: {} (was unknown)",
+                                ka.identity,
+                                remote
+                            );
+                        }
+                        peer.remote_addr = Some(remote);
+                        peer.last_active = Some(Instant::now());
+                    }
+                    
                     continue; // Skip keepalive, receive next frame
                 }
                 _ => {
@@ -447,6 +543,11 @@ impl PeerHandler {
             
             (peer.identity.clone(), peer.remote_addr, peer.last_active)
         };
+
+        if peer_remote_addr.is_none() {
+            return Err(format!("P2P send frame fail {}", dest_ip).into());
+        }
+        let peer_remote_addr = peer_remote_addr.unwrap();
 
         // Validate connection is active (within 15 seconds)
         match peer_last_active {
@@ -523,10 +624,9 @@ impl PeerHandler {
 
             // Check if destination falls within peer's CIDR ranges
             for cidr in &peer.ciders {
-                if let Ok(network) = cidr.parse::<IpNet>() {
-                    if network.contains(&dest_ip_addr) {
-                        return Some(peer);
-                    }
+                if let Ok(network) = cidr.parse::<IpNet>()
+                    && network.contains(&dest_ip_addr) {
+                    return Some(peer);
                 }
             }
         }
@@ -550,10 +650,15 @@ impl PeerHandler {
     async fn update_peer_active(&mut self, remote_addr: SocketAddr) {
         let mut peers = self.peers.write().await;
         for peer in peers.values_mut() {
-            if peer.remote_addr == remote_addr {
-                peer.last_active = Some(Instant::now());
-                tracing::debug!("Updated last_active for peer: {}", peer.identity);
-                break;
+            match peer.remote_addr {
+                Some(r) => {
+                    if r == remote_addr {
+                        peer.last_active = Some(Instant::now());
+                        tracing::debug!("Updated last_active for peer: {}", peer.identity);
+                        break;
+                    }
+                }
+                None => continue,
             }
         }
     }

@@ -83,7 +83,7 @@ impl TcpConnection {
                 self.input_stream.advance(total_len);
                 Ok(Some(frame))
             }
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 }
@@ -132,7 +132,7 @@ impl Connection for TcpConnection {
         let buf = match result {
             Ok(buf) => buf,
             Err(e) => {
-                return Err(e.into());
+                return Err(e);
             }
         };
 

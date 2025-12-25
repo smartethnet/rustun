@@ -12,9 +12,7 @@ impl SysRoute {
     /// - gateway: gateway IP address
     pub fn add(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
         for dst in dsts {
-            if let Err(e) = self.add_route(&dst, &gateway) {
-                return Err(e);
-            }
+            self.add_route(&dst, &gateway)?
         }
         Ok(())
     }
@@ -25,9 +23,7 @@ impl SysRoute {
     #[allow(unused)]
     pub fn del(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
         for dst in dsts {
-            if let Err(e) = self.del_route(&dst, &gateway) {
-                return Err(e);
-            }
+            self.del_route(&dst, &gateway)?
         }
         Ok(())
     }
@@ -35,7 +31,7 @@ impl SysRoute {
     #[cfg(target_os = "linux")]
     fn add_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
         let output = Command::new("ip")
-            .args(&["route", "add", dst, "via", gateway])
+            .args(["route", "add", dst, "via", gateway])
             .output()
             .map_err(|e| format!("Failed to execute ip command: {}", e))?;
 
@@ -49,7 +45,7 @@ impl SysRoute {
     #[cfg(target_os = "linux")]
     fn del_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
         let output = Command::new("ip")
-            .args(&["route", "del", dst, "via", gateway])
+            .args(["route", "del", dst, "via", gateway])
             .output()
             .map_err(|e| format!("Failed to execute ip command: {}", e))?;
 
@@ -63,7 +59,7 @@ impl SysRoute {
     #[cfg(target_os = "macos")]
     fn add_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
         let output = Command::new("route")
-            .args(&["-n", "add", "-net", dst, gateway])
+            .args(["-n", "add", "-net", dst, gateway])
             .output()
             .map_err(|e| format!("Failed to execute route command: {}", e))?;
 
@@ -77,7 +73,7 @@ impl SysRoute {
     #[cfg(target_os = "macos")]
     fn del_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
         let output = Command::new("route")
-            .args(&["-n", "delete", "-net", dst, gateway])
+            .args(["-n", "delete", "-net", dst, gateway])
             .output()
             .map_err(|e| format!("Failed to execute route command: {}", e))?;
 

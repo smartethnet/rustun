@@ -102,15 +102,14 @@ impl Listener for TCPListener {
                     match socket {
                         Ok(socket) => {
                             let conn = TcpConnection::new(socket, self.block.clone());
-                            if let Some(tx) = &self.on_conn_tx {
-                                if let Err(e) = tx.send(Box::new(conn)).await {
-                                    tracing::warn!("Failed to send new connection: {}", e);
-                                }
+                            if let Some(tx) = &self.on_conn_tx
+                                && let Err(e) = tx.send(Box::new(conn)).await {
+                                tracing::warn!("Failed to send new connection: {}", e);
                             }
                         },
                         Err(e) => {
                             tracing::error!("Accept error: {}", e);
-                            return Err(e.into());
+                            return Err(e);
                         }
                     };
                 }

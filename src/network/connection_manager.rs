@@ -28,7 +28,7 @@ impl ConnectionManager {
             .write()
             .unwrap_or_else(|e| e.into_inner())
             .entry(cluster)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(meta);
     }
 
@@ -69,7 +69,7 @@ impl ConnectionManager {
         guard.get(cluster).and_then(|connections| {
             connections
                 .iter()
-                .find(|conn| conn.match_dst(dst.clone()))
+                .find(|conn| conn.match_dst(dst.to_owned()))
                 .cloned()
         })
     }
@@ -85,5 +85,51 @@ impl ConnectionManager {
                 .find(|conn| conn.identity ==*identity)
                 .cloned()
         })
+    }
+
+    /// Update connection's IPv6 address and port (e.g., from keepalive)
+    ///
+    /// This is useful when a client's public IPv6 address changes dynamically.
+    /// The updated information will be propagated to other clients in the same cluster.
+    ///
+    /// # Returns
+    /// * `Some(Vec<ConnectionMeta>)` - List of other connections in the cluster if the address changed
+    /// * `None` - If the address didn't change or the connection wasn't found
+    pub fn update_connection_info(&self, cluster: &str, identity: &String, ipv6: String, port: u16) -> Option<Vec<ConnectionMeta>> {
+        let mut cluster_map = self
+            .cluster_connections
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        if let Some(connections) = cluster_map.get_mut(cluster)
+            && let Some(conn) = connections.iter_mut().find(|c| c.identity == *identity)
+            && (conn.ipv6 != ipv6 || conn.port != port) {
+            tracing::info!(
+                "Updated connection info for {}: {}:{} -> {}:{}",
+                identity,
+                conn.ipv6,
+                conn.port,
+                ipv6,
+                port
+            );
+            conn.ipv6 = ipv6;
+            conn.port = port;
+            
+            // Return other connections in the cluster (excluding the updated one)
+            let others: Vec<ConnectionMeta> = connections
+                .iter()
+                .filter(|c| c.identity != *identity)
+                .cloned()
+                .collect();
+            return Some(others);
+        }
+        
+        None
+    }
+}
+
+impl Default for ConnectionManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

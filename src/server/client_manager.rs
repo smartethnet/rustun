@@ -45,7 +45,7 @@ impl ClientManager {
             clients_map.insert(client.identity.clone(), client.clone());
             cluster_map
                 .entry(client.cluster.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(client);
         }
     }

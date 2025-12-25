@@ -1,13 +1,14 @@
+use crate::client::P2P_UDP_PORT;
+use crate::client::Args;
+use crate::client::prettylog::log_handshake_success;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
 use crate::network::{create_connection, Connection, ConnectionConfig, TCPConnectionConfig};
+use crate::utils;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, interval};
-use crate::client::main::Args;
-use crate::client::prettylog::log_handshake_success;
-use crate::utils;
 
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
 const CONFIG_CHANNEL_SIZE: usize = 10;
@@ -20,6 +21,7 @@ pub struct RelayClientConfig {
     pub keep_alive_thresh: u8,
     pub identity: String,
     pub ipv6: String,
+    pub port: u16,
 }
 
 pub struct RelayClient {
@@ -47,10 +49,21 @@ impl RelayClient {
     pub async fn run(&mut self, mut conn: Box<dyn Connection>) -> crate::Result<()> {
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
         let mut keepalive_wait: u8 = 0;
+        
+        // IPv6 update interval (check every 5 minutes)
+        let mut ipv6_update_ticker = interval(Duration::from_secs(300));
+        ipv6_update_ticker.tick().await; // Skip first immediate tick
+        
+        let mut current_ipv6 = self.cfg.ipv6.clone();
+        
         loop {
             tokio::select! {
                 _ = keepalive_ticker.tick() => {
-                    let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {});
+                    let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
+                        identity: self.cfg.identity.clone(),
+                        ipv6: current_ipv6.clone(),
+                        port: self.cfg.port,
+                    });
                     match conn.write_frame(keepalive_frame).await {
                         Ok(_) => {
                             keepalive_wait = 0;
@@ -65,6 +78,18 @@ impl RelayClient {
                         }
                     }
                 }
+                
+                // Periodic IPv6 address update check
+                _ = ipv6_update_ticker.tick() => {
+                    if let Some(new_ipv6) = utils::get_ipv6() {
+                        tracing::info!("IPv6 address updated: {} -> {}", current_ipv6, new_ipv6);
+                        current_ipv6 = new_ipv6.clone();
+                        self.cfg.ipv6 = new_ipv6;
+                    } else {
+                        tracing::debug!("Failed to retrieve IPv6 address during update check");
+                    }
+                }
+                
                 // inbound
                 result = conn.read_frame() => {
                     match result {
@@ -73,12 +98,16 @@ impl RelayClient {
                             let beg = Instant::now();
                             match frame {
                                 Frame::KeepAlive(_) => {
-                                    if keepalive_wait > 0 {
-                                        keepalive_wait-=1;
-                                    }
+                                    keepalive_wait = keepalive_wait.saturating_sub(1);
                                 }
                                 Frame::Data(data) => {
                                     if let Err(e) =  self.inbound_tx.send(Frame::Data(data)).await {
+                                        tracing::error!("server => device inbound: {}", e);
+                                        break;
+                                    }
+                                }
+                                Frame::PeerUpdate(data) => {
+                                    if let Err(e) =  self.inbound_tx.send(Frame::PeerUpdate(data)).await {
                                         tracing::error!("server => device inbound: {}", e);
                                         break;
                                     }
@@ -120,7 +149,7 @@ impl RelayClient {
         }), self.block.clone()).await;
         match conn {
             Ok(conn) => Ok(conn),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e)
         }
     }
 
@@ -128,7 +157,7 @@ impl RelayClient {
         conn.write_frame(Frame::Handshake(HandshakeFrame {
             identity: self.cfg.identity.clone(),
             ipv6: self.cfg.ipv6.clone(),
-            port: 51258,
+            port: self.cfg.port,
         }))
         .await?;
 
@@ -232,6 +261,7 @@ pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::
         keep_alive_thresh: args.keepalive_threshold,
         identity: args.identity.clone(),
         ipv6,
+        port: P2P_UDP_PORT,
     };
 
     let mut handler = ClientHandler::new(block);

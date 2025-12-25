@@ -35,7 +35,7 @@ impl Device {
             .address(self.config.ip.clone())
             .netmask(self.config.mask.clone())
             .destination(self.config.gateway.clone())
-            .mtu(self.config.mtu as u16)
+            .mtu(self.config.mtu)
             .up();
 
         #[cfg(target_os = "linux")]
@@ -135,5 +135,11 @@ impl DeviceHandler {
             Ok(_) => Ok(()),
             Err(e) => Err(e.into()),
         }
+    }
+}
+
+impl Default for DeviceHandler {
+    fn default() -> Self {
+        Self::new()
     }
 }

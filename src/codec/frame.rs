@@ -35,6 +35,8 @@ pub(crate) enum FrameType {
     Data = 3,
     /// Server handshake response (Type 4)
     HandshakeReply = 4,
+    /// Peer update notification (Type 5)
+    PeerUpdate = 5,
 }
 
 impl TryFrom<u8> for FrameType {
@@ -43,7 +45,7 @@ impl TryFrom<u8> for FrameType {
     /// Converts a byte value to a FrameType
     ///
     /// # Arguments
-    /// * `v` - Byte value to convert (1-4)
+    /// * `v` - Byte value to convert (1-5)
     ///
     /// # Returns
     /// * `Ok(FrameType)` if the value is valid
@@ -54,6 +56,7 @@ impl TryFrom<u8> for FrameType {
             0x02 => Ok(FrameType::KeepAlive),
             0x03 => Ok(FrameType::Data),
             0x04 => Ok(FrameType::HandshakeReply),
+            0x05 => Ok(FrameType::PeerUpdate),
             _ => Err(FrameError::Invalid),
         }
     }
@@ -69,7 +72,7 @@ pub(crate) const HDR_LEN: usize = 8;
 /// Represents all possible frame types in the VPN protocol. Each variant contains
 /// the frame-specific data structure. Frames are serialized/deserialized using
 /// the parser module and encrypted according to the configured cipher.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Frame {
     /// Client handshake request containing identity
     Handshake(HandshakeFrame),
@@ -77,6 +80,8 @@ pub enum Frame {
     HandshakeReply(HandshakeReplyFrame),
     /// Connection keep-alive heartbeat
     KeepAlive(KeepAliveFrame),
+    /// Peer information update notification
+    PeerUpdate(PeerUpdateFrame),
     /// Tunneled IP packet data
     Data(DataFrame),
 }
@@ -93,6 +98,7 @@ impl Display for Frame {
                 write!(f, "handshake reply with {} others", frame.others.len())
             }
             Frame::KeepAlive(_frame) => write!(f, "keepalive"),
+            Frame::PeerUpdate(frame) => write!(f, "peer update for {}", frame.identity),
             Frame::Data(frame) => write!(f, "data with payload size {}", frame.payload.len()),
         }
     }
@@ -109,7 +115,7 @@ impl Display for Frame {
 /// 2. Client sends Handshake with identity
 /// 3. Server validates identity and sends HandshakeReply
 /// 4. Connection established, data transfer begins
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandshakeFrame {
     /// Client identity (unique identifier)
     ///
@@ -192,10 +198,41 @@ pub struct RouteItem {
 /// - Detect network failures or peer crashes
 /// - Prevent idle connection timeouts by firewalls/NAT devices
 /// - Maintain connection state information
+/// - Exchange peer identity and connectivity information for P2P
 ///
-/// This frame has no payload data.
-#[derive(Debug, Deserialize)]
-pub struct KeepAliveFrame {}
+/// Contains peer identity, IPv6 address, and UDP port for establishing
+/// direct P2P connections.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeepAliveFrame {
+    /// Peer identity (unique identifier)
+    pub identity: String,
+    
+    /// Public IPv6 address
+    pub ipv6: String,
+    
+    /// UDP port for P2P connections
+    pub port: u16,
+}
+
+/// Peer update notification frame sent by server
+///
+/// Notifies clients when a peer's IPv6 address or port changes.
+/// This allows P2P connections to adapt to dynamic network changes.
+///
+/// ## Usage
+/// - Server sends when detecting peer address changes (from keepalive)
+/// - Client updates its peer routing table accordingly
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerUpdateFrame {
+    /// Peer identity (which peer changed)
+    pub identity: String,
+    
+    /// Updated IPv6 address
+    pub ipv6: String,
+    
+    /// Updated UDP port
+    pub port: u16,
+}
 
 /// Data frame containing tunneled IP packets
 ///
@@ -206,7 +243,7 @@ pub struct KeepAliveFrame {}
 /// # Payload Format
 /// Contains a complete IP packet (IPv4 or IPv6) including headers and data.
 /// Minimum valid IPv4 packet size is 20 bytes (header only).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct DataFrame {
     /// Raw IP packet data (encrypted in transit)
     ///

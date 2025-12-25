@@ -1,5 +1,5 @@
 use crate::codec::frame::Frame::HandshakeReply;
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, RouteItem};
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, PeerUpdateFrame, RouteItem};
 use crate::crypto::Block;
 use crate::network::connection_manager::ConnectionManager;
 use crate::network::{Connection, ListenerConfig, create_listener, TCPListenerConfig};
@@ -44,7 +44,7 @@ impl Server {
         let mut listener = match listener {
             Ok(listener) => listener,
             Err(err) => {
-                return Err(err.into());
+                return Err(err);
             }
         };
 
@@ -147,8 +147,8 @@ impl Handler {
             gateway: client_config.gateway.clone(),
             ciders: client_config.ciders.clone(),
             outbound_tx: self.outbound_tx.clone(),
-            ipv6: hs.ipv6.clone(),
-            port: hs.port,
+            ipv6: "".to_string(), // Do not set ipv6 and port here, it will be set in the keepalive frame
+            port: 0, 
         };
         tracing::debug!("handshake completed with {:?}", meta);
 
@@ -241,7 +241,41 @@ impl Handler {
     async fn handle_frame(&mut self, frame: Frame) {
         match frame {
             Frame::KeepAlive(frame) => {
-                tracing::debug!("on keepalive");
+                tracing::debug!("on keepalive from {}", frame.identity);
+                
+                // Update connection metadata with latest IPv6 and port from keepalive
+                // If the address changed, notify other clients in the cluster
+                if let Some(cluster) = &self.cluster {
+                    if let Some(other_connections) = self.connection_manager.update_connection_info(
+                        cluster,
+                        &frame.identity,
+                        frame.ipv6.clone(),
+                        frame.port,
+                    ) {
+                        // Address changed, notify all other clients in the cluster
+                        tracing::info!(
+                            "Notifying {} peers about {}'s address change to {}:{}",
+                            other_connections.len(),
+                            frame.identity,
+                            frame.ipv6,
+                            frame.port
+                        );
+                        
+                        let peer_update = Frame::PeerUpdate(PeerUpdateFrame {
+                            identity: frame.identity.clone(),
+                            ipv6: frame.ipv6.clone(),
+                            port: frame.port,
+                        });
+                        
+                        for conn in other_connections {
+                            if let Err(e) = conn.outbound_tx.send(peer_update.clone()).await {
+                                tracing::warn!("Failed to send peer update to {}: {:?}", conn.identity, e);
+                            }
+                        }
+                    }
+                }
+                
+                // Reply keepalive
                 if let Err(e) = self.outbound_tx.send(Frame::KeepAlive(frame)).await {
                     tracing::error!("reply keepalive frame failed with {:?}", e);
                 }

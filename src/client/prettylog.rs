@@ -2,7 +2,7 @@
 // Log Output Functions
 // ============================================================================
 
-use crate::client::main::Args;
+use crate::client::Args;
 use crate::codec::frame::HandshakeReplyFrame;
 
 pub fn log_startup_banner(args: &Args) {

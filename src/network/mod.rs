@@ -147,10 +147,9 @@ impl ConnectionMeta {
         };
 
         for cidr in &self.ciders {
-            if let Ok(network) = cidr.parse::<IpNet>() {
-                if network.contains(&dst_ip) {
-                    return true;
-                }
+            if let Ok(network) = cidr.parse::<IpNet>()
+                && network.contains(&dst_ip) {
+                return true;
             }
         }
 

@@ -83,7 +83,11 @@ async fn activate_peer_connection(
     // Send keepalive response (this will trigger last_active update when processed)
     send_frame(
         mock_socket,
-        Frame::KeepAlive(KeepAliveFrame {}),
+        Frame::KeepAlive(KeepAliveFrame {
+            identity: "mock_peer".to_string(),
+            ipv6: "::1".to_string(),
+            port: mock_socket.local_addr().unwrap().port(),
+        }),
         from,
         block,
     )
@@ -127,8 +131,13 @@ async fn test_peer_keepalive_exchange() {
     let (mock_peer_a, _peer_a_addr) = create_mock_peer(50001, block.clone()).await;
 
     // Create PeerHandler on port 50000
-    let mut peer_handler = rustun::client::peer::PeerHandler::new(block.clone());
-    peer_handler.run_peer(50000);
+    let mut peer_handler = rustun::client::peer::PeerHandler::new(
+        block.clone(),
+        "test_handler".to_string(),
+        "::1".to_string(),
+        50000,
+    );
+    peer_handler.run_peer();
 
     // Add peer A
     let routes = vec![RouteItem {
@@ -151,7 +160,11 @@ async fn test_peer_keepalive_exchange() {
     tracing::info!("Mock peer A sending keepalive back...");
     send_frame(
         &mock_peer_a,
-        Frame::KeepAlive(KeepAliveFrame {}),
+        Frame::KeepAlive(KeepAliveFrame {
+            identity: "mock_peer_a".to_string(),
+            ipv6: "::1".to_string(),
+            port: mock_peer_a.local_addr().unwrap().port(),
+        }),
         from,
         &block,
     )
@@ -178,8 +191,13 @@ async fn test_peer_data_transmission() {
     let (mock_peer_b, _peer_b_addr) = create_mock_peer(50011, block.clone()).await;
 
     // Create PeerHandler on port 50010
-    let mut peer_handler = rustun::client::peer::PeerHandler::new(block.clone());
-    peer_handler.run_peer(50010);
+    let mut peer_handler = rustun::client::peer::PeerHandler::new(
+        block.clone(),
+        "test_handler".to_string(),
+        "::1".to_string(),
+        50010,
+    );
+    peer_handler.run_peer();
 
     // Add peer B
     let routes = vec![RouteItem {
@@ -243,8 +261,13 @@ async fn test_peer_connection_timeout() {
     let (mock_peer_c, _) = create_mock_peer(50021, block.clone()).await;
 
     // Create PeerHandler on port 50020
-    let mut peer_handler = rustun::client::peer::PeerHandler::new(block.clone());
-    peer_handler.run_peer(50020);
+    let mut peer_handler = rustun::client::peer::PeerHandler::new(
+        block.clone(),
+        "test_handler".to_string(),
+        "::1".to_string(),
+        50020,
+    );
+    peer_handler.run_peer();
 
     // Add peer C
     let routes = vec![RouteItem {
@@ -297,8 +320,13 @@ async fn test_peer_periodic_keepalive() {
     let (mock_peer_d, _) = create_mock_peer(50031, block.clone()).await;
 
     // Create PeerHandler on port 50030
-    let mut peer_handler = rustun::client::peer::PeerHandler::new(block.clone());
-    peer_handler.run_peer(50030);
+    let mut peer_handler = rustun::client::peer::PeerHandler::new(
+        block.clone(),
+        "test_handler".to_string(),
+        "::1".to_string(),
+        50030,
+    );
+    peer_handler.run_peer();
 
     // Add peer D
     let routes = vec![RouteItem {
@@ -322,7 +350,11 @@ async fn test_peer_periodic_keepalive() {
     // Send response to activate connection
     send_frame(
         &mock_peer_d,
-        Frame::KeepAlive(KeepAliveFrame {}),
+        Frame::KeepAlive(KeepAliveFrame {
+            identity: "mock_peer_d".to_string(),
+            ipv6: "::1".to_string(),
+            port: mock_peer_d.local_addr().unwrap().port(),
+        }),
         from,
         &block,
     )
@@ -358,8 +390,13 @@ async fn test_peer_bidirectional_data() {
     let (mock_peer_e, _peer_e_addr) = create_mock_peer(50041, block.clone()).await;
 
     // Create PeerHandler on port 50040
-    let mut peer_handler = rustun::client::peer::PeerHandler::new(block.clone());
-    peer_handler.run_peer(50040);
+    let mut peer_handler = rustun::client::peer::PeerHandler::new(
+        block.clone(),
+        "test_handler".to_string(),
+        "::1".to_string(),
+        50040,
+    );
+    peer_handler.run_peer();
 
     // Add peer E
     let routes = vec![RouteItem {

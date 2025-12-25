@@ -1,6 +1,7 @@
 use clap::Parser;
 use std::sync::Arc;
 
+use crate::client::{Args, DEFAULT_MTU, P2P_UDP_PORT};
 use crate::client::relay::{ClientHandler, new_relay_handler};
 use crate::client::peer::{PeerHandler};
 use crate::client::prettylog::{log_startup_banner};
@@ -9,37 +10,6 @@ use crate::crypto::{self, Block};
 use crate::utils;
 use crate::utils::device::{DeviceConfig, DeviceHandler};
 use crate::utils::sys_route::SysRoute;
-
-const DEFAULT_MTU: u16 = 1430;
-
-/// Rustun VPN Client
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct Args {
-    /// Server address (e.g., 127.0.0.1:8080)
-    #[arg(short, long)]
-    pub server: String,
-
-    /// Client identity/name
-    #[arg(short, long)]
-    pub identity: String,
-
-    /// Encryption method: plain, aes256:<key>, chacha20:<key>, or xor:<key>
-    #[arg(short, long, default_value = "chacha20:rustun")]
-    pub crypto: String,
-
-    /// Keep-alive interval in seconds
-    #[arg(long, default_value = "10")]
-    pub keepalive_interval: u64,
-
-    /// Keep-alive threshold (reconnect after this many failures)
-    #[arg(long, default_value = "5")]
-    pub keepalive_threshold: u8,
-
-    /// Enable P2P direct connection (disabled by default, uses relay only)
-    #[arg(long)]
-    pub enable_p2p: bool,
-}
 
 pub async fn run_client() {
     let args = Args::parse();
@@ -74,8 +44,13 @@ pub async fn run_client() {
     // Initialize P2P handler if enabled
     let mut peer_handler = if args.enable_p2p {
         tracing::info!("P2P mode enabled");
-        let mut handler = PeerHandler::new(crypto_block.clone());
-        handler.run_peer(51258);
+        let mut handler = PeerHandler::new(
+            crypto_block.clone(),
+            args.identity.clone(),
+            device_config.ipv6.clone(),
+            P2P_UDP_PORT,
+        );
+        handler.run_peer();
         handler.add_peers(device_config.others.clone()).await;
         handler.start_keepalive_timer().await;
         Some(handler)
@@ -107,7 +82,7 @@ fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandl
     })?;
 
     // Add system routes for peers
-    let sys_route = SysRoute::default();
+    let sys_route = SysRoute::new();
     for route_item in &device_config.others {
         if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone()) {
             tracing::error!("Failed to add route for {:?}: {}", route_item, e);
@@ -153,13 +128,29 @@ async fn run_event_loop(
                     }
                 }
 
-                // Server -> TUN device
+                // Server -> TUN device or peer update
                 frame = client_handler.recv_frame() => {
-                    if let Ok(Frame::Data(data_frame)) = frame {
-                        tracing::debug!("Relay -> Device: {} bytes", data_frame.payload.len());
-                        if let Err(e) = dev.send(data_frame.payload).await {
-                            tracing::error!("Failed to write to device: {}", e);
+                    match frame {
+                        Ok(Frame::Data(data_frame)) => {
+                            tracing::debug!("Relay -> Device: {} bytes", data_frame.payload.len());
+                            if let Err(e) = dev.send(data_frame.payload).await {
+                                tracing::error!("Failed to write to device: {}", e);
+                            }
                         }
+                        Ok(Frame::PeerUpdate(peer_update)) => {
+                            tracing::info!(
+                                "Peer update received: {} -> {}:{}",
+                                peer_update.identity,
+                                peer_update.ipv6,
+                                peer_update.port
+                            );
+                            peer_handler.update_peer(
+                                peer_update.identity,
+                                peer_update.ipv6,
+                                peer_update.port
+                            ).await;
+                        }
+                        _ => {}
                     }
                 }
 
@@ -186,7 +177,7 @@ async fn run_event_loop(
                     }
                 }
 
-                // Server -> TUN device
+                // Server -> TUN device (relay only, ignore peer updates)
                 frame = client_handler.recv_frame() => {
                     if let Ok(Frame::Data(data_frame)) = frame {
                         tracing::debug!("Relay -> Device: {} bytes", data_frame.payload.len());

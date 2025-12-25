@@ -303,7 +303,7 @@ By default, all traffic goes through the relay server. Enable P2P for direct IPv
 **Requirements:**
 - Both clients must have IPv6 connectivity
 - Both clients must use `--enable-p2p` flag
-- UDP port 51258 must be accessible
+- UDP port 51258 must be accessible (configurable via `P2P_UDP_PORT` constant)
 
 **How it works:**
 1. Clients exchange IPv6 addresses via server
