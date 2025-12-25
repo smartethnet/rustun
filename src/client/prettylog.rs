@@ -21,11 +21,11 @@ pub fn log_handshake_success(config: &HandshakeReplyFrame) {
     println!("Gateway: {}", config.gateway);
     println!("IPv6: {}", config.ipv6);
     println!("Peer nodes: {}", config.others.len());
-
     if !config.others.is_empty() {
         for (idx, peer) in config.others.iter().enumerate() {
             println!("  [{}] Identity: {}", idx + 1, peer.identity);
             println!("      Private IP: {}", peer.private_ip);
+            println!("      IPv6: {}", peer.ipv6);
             println!("      CIDR ranges: {}", peer.ciders.join(", "));
         }
     }

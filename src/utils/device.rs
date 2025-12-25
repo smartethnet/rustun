@@ -67,7 +67,7 @@ impl Device {
                 }
                 packet = self.outbound_rx.recv() => {
                     if let Some(packet) = packet {
-                        tracing::info!("server => device {} bytes", packet.len());
+                        tracing::debug!("server => device {} bytes", packet.len());
                         let result = dev.write(packet.as_slice()).await;
                         if let Err(e) = result {
                             tracing::error!("write device fail: {:?}", e);
@@ -129,7 +129,7 @@ impl DeviceHandler {
                 return Err("device handler send none".into());
             }
         };
-        tracing::info!("device => server outbound tx len: {}", packet.len());
+        tracing::debug!("device => server outbound tx len: {}", packet.len());
         let result = outbound_tx.send(packet).await;
         match result {
             Ok(_) => Ok(()),

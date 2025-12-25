@@ -30,7 +30,6 @@ pub fn get_ipv6() -> Option<String> {
 
     for api in &apis {
         if let Ok(ipv6) = fetch_ipv6_from_url(api) {
-            tracing::info!("Retrieved public IPv6 from {}: {}", api, ipv6);
             return Some(ipv6);
         }
     }

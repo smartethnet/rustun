@@ -1,8 +1,9 @@
 use clap::Parser;
 use std::sync::Arc;
-
+use std::time::Duration;
+use tokio::time::interval;
 use crate::client::{Args, DEFAULT_MTU, P2P_UDP_PORT};
-use crate::client::relay::{ClientHandler, new_relay_handler};
+use crate::client::relay::{RelayHandler, new_relay_handler};
 use crate::client::peer::{PeerHandler};
 use crate::client::prettylog::{log_startup_banner};
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
@@ -93,10 +94,11 @@ fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandl
 }
 
 async fn run_event_loop(
-    client_handler: &mut ClientHandler,
+    client_handler: &mut RelayHandler,
     peer_handler: &mut Option<PeerHandler>,
     dev: &mut DeviceHandler,
 ) {
+    let mut exporter_ticker = interval(Duration::from_secs(30));
     loop {
         // Build select branches based on whether P2P is enabled
         if let Some(peer_handler) = peer_handler {
@@ -163,6 +165,9 @@ async fn run_event_loop(
                         }
                     }
                 }
+                _ = exporter_ticker.tick() => {
+                    get_status(client_handler, Some(peer_handler)).await;
+                }
             }
         } else {
             // P2P disabled: relay only
@@ -186,7 +191,66 @@ async fn run_event_loop(
                         }
                     }
                 }
+                _ = exporter_ticker.tick() => {
+                    get_status(client_handler, None).await;
+                }
             }
         }
     }
+}
+
+async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>) {
+    println!("\n╔══════════════════════════════════════════════════════════════════════╗");
+    println!("║                        CONNECTION STATUS                             ║");
+    println!("╚══════════════════════════════════════════════════════════════════════╝");
+    
+    // Relay Status
+    let relay_status = relay.get_status();
+    println!("\n📡 Relay Connection (TCP)");
+    println!("   ├─ RX Frames:  {} (Errors: {})", relay_status.rx_frame, relay_status.rx_error);
+    println!("   └─ TX Frames:  {} (Errors: {})", relay_status.tx_frame, relay_status.tx_error);
+    
+    // P2P Status
+    if let Some(peer_handler) = peer {
+        let peer_status = peer_handler.get_status().await;
+        
+        if peer_status.is_empty() {
+            println!("\n🔗 P2P Connections (UDP)");
+            println!("   └─ No peers configured");
+        } else {
+            println!("\n🔗 P2P Connections (UDP): {} peers", peer_status.len());
+            
+            for (idx, status) in peer_status.iter().enumerate() {
+                let is_last = idx == peer_status.len() - 1;
+                let prefix = if is_last { "└─" } else { "├─" };
+                
+                // Format connection state
+                let state = match (&status.addr, &status.last_active) {
+                    (None, _) => "❌ Unknown Address".to_string(),
+                    (Some(_), None) => "⏳ Connecting...".to_string(),
+                    (Some(_), Some(last)) => {
+                        let elapsed = last.elapsed().as_secs();
+                        if elapsed < 15 {
+                            format!("✅ Active ({}s ago)", elapsed)
+                        } else {
+                            format!("⚠️  Inactive ({}s ago)", elapsed)
+                        }
+                    }
+                };
+                
+                // Format address
+                let addr_str = status.addr
+                    .map(|a| format!("{}", a))
+                    .unwrap_or_else(|| "N/A".to_string());
+                
+                println!("   {} Peer: {}", prefix, status.identity);
+                println!("   {}    Address: {}", if is_last { " " } else { "│" }, addr_str);
+                println!("   {}    Status:  {}", if is_last { " " } else { "│" }, state);
+            }
+        }
+    } else {
+        println!("\n🔗 P2P Mode: Disabled");
+    }
+    
+    println!();
 }

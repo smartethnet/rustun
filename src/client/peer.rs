@@ -165,6 +165,40 @@ struct PeerMeta {
     last_active: Option<Instant>,
 }
 
+/// Peer connection status information
+///
+/// Provides a snapshot of a peer's current connection state including
+/// its identity, resolved address, and last activity timestamp.
+///
+/// # Usage
+/// Used by `PeerHandler::get_status()` to report the health and connectivity
+/// state of all configured P2P peers. Useful for monitoring, debugging,
+/// and displaying connection status to users.
+///
+/// # Fields
+/// * `identity` - Unique identifier of the peer
+/// * `addr` - Resolved socket address for P2P communication (None if unknown)
+/// * `last_active` - Timestamp of last received packet (None if never connected)
+#[derive(Debug)]
+pub struct PeerStatus {
+    /// Unique identifier of the peer
+    pub identity: String,
+    
+    /// Resolved socket address ([ipv6]:port or [ipv4]:port)
+    ///
+    /// - `None`: Address not yet known (peer behind NAT, waiting for first packet)
+    /// - `Some(addr)`: Known address, either from configuration or learned dynamically
+    pub addr: Option<SocketAddr>,
+    
+    /// Timestamp of last received packet from this peer
+    ///
+    /// - `None`: No packets received yet (connection not established)
+    /// - `Some(instant)`: Last successful communication time
+    ///
+    /// Connection is considered active if `Instant::now() - last_active < 15s`
+    pub last_active: Option<Instant>,
+}
+
 /// Peer connection manager for P2P communication
 ///
 /// Manages a collection of peer connections and handles:
@@ -483,12 +517,11 @@ impl PeerHandler {
                 .await
                 .ok_or("recv from peers channel closed")?;
 
-            self.update_peer_active(remote).await;
             let (frame, _) = Parser::unmarshal(&buf, self.block.as_ref())?;
 
             match frame {
                 Frame::KeepAlive(ka) => {
-                    tracing::debug!("Received keepalive from peer {} at {}", ka.identity, remote);
+                    tracing::info!("Received keepalive from peer {} at {}", ka.identity, remote);
                     
                     // Update peer address and last_active based on keepalive identity
                     // This enables address learning for peers behind NAT
@@ -505,10 +538,12 @@ impl PeerHandler {
                         peer.remote_addr = Some(remote);
                         peer.last_active = Some(Instant::now());
                     }
-                    
-                    continue; // Skip keepalive, receive next frame
+
+                    // Dont need to reply
+                    continue;
                 }
                 _ => {
+                    self.update_peer_active(remote).await;
                     return Ok(frame);
                 }
             }
@@ -540,7 +575,6 @@ impl PeerHandler {
             let peers = self.peers.read().await;
             let peer = self.find_peer_by_ip_locked(&peers, dest_ip)
                 .ok_or("No peer found for destination")?;
-            
             (peer.identity.clone(), peer.remote_addr, peer.last_active)
         };
 
@@ -661,5 +695,19 @@ impl PeerHandler {
                 None => continue,
             }
         }
+    }
+
+    pub async fn get_status(&self) -> Vec<PeerStatus> {
+        let guard = self.peers.read().await;
+        let mut result: Vec<PeerStatus> = Vec::new();
+        for peer in guard.values() {
+            let status = PeerStatus {
+                identity: peer.identity.clone(),
+                addr: peer.remote_addr,
+                last_active: peer.last_active,
+            };
+            result.push(status);
+        }
+        result
     }
 }

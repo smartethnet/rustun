@@ -170,21 +170,43 @@ impl RelayClient {
     }
 }
 
-pub struct ClientHandler {
+#[derive(Clone)]
+#[derive(Debug)]
+pub struct RelayStatus {
+    pub rx_error: u64,
+    pub rx_frame: u64,
+    pub tx_frame: u64,
+    pub tx_error: u64,
+}
+
+impl Default for RelayStatus {
+    fn default() -> Self {
+        Self{
+            rx_error: 0,
+            tx_error: 0,
+            rx_frame: 0,
+            tx_frame: 0,
+        }
+    }
+}
+
+pub struct RelayHandler {
     outbound_tx: Option<mpsc::Sender<Frame>>,
     inbound_rx: mpsc::Receiver<Frame>,
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
+    metrics: RelayStatus,
 }
 
-impl ClientHandler {
-    pub fn new(block: Arc<Box<dyn Block>>) -> ClientHandler {
+impl RelayHandler {
+    pub fn new(block: Arc<Box<dyn Block>>) -> RelayHandler {
         let (inbound_tx, inbound_rx) = mpsc::channel(10);
-        ClientHandler {
+        RelayHandler {
             outbound_tx: None,
             inbound_rx,
             inbound_tx,
             block,
+            metrics: Default::default(),
         }
     }
 
@@ -231,28 +253,44 @@ impl ClientHandler {
     }
 
     pub async fn send_frame(&mut self, frame: Frame) -> crate::Result<()> {
+        self.metrics.tx_frame += 1;
         let outbound_tx = match self.outbound_tx.clone() {
             Some(tx) => tx,
-            None => {return Err("relay connection disconnect".into())}
+            None => {
+                self.metrics.tx_error += 1;
+                return Err("relay connection disconnect".into())}
         };
 
         let result = outbound_tx.send(frame).await;
         match result {
             Ok(()) => Ok(()),
-            Err(e) => Err(format!("device=> server fail {:?}", e).into()),
+            Err(e) => {
+                self.metrics.tx_error += 1;
+                Err(format!("device=> server fail {:?}", e).into())
+            },
         }
     }
 
     pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
         let result = self.inbound_rx.recv().await;
         match result {
-            Some(frame) => Ok(frame),
-            None => Err("server => device fail for closed channel".into()),
+            Some(frame) => {
+                self.metrics.rx_frame += 1;
+                Ok(frame)
+            },
+            None => {
+                self.metrics.rx_error += 1;
+                Err("server => device fail for closed channel".into())
+            },
         }
+    }
+
+    pub fn get_status(&self) -> RelayStatus {
+        self.metrics.clone()
     }
 }
 
-pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::Result<(ClientHandler, HandshakeReplyFrame)> {
+pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::Result<(RelayHandler, HandshakeReplyFrame)> {
     let ipv6 = utils::get_ipv6().unwrap_or("".to_string());
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
@@ -264,7 +302,7 @@ pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::
         port: P2P_UDP_PORT,
     };
 
-    let mut handler = ClientHandler::new(block);
+    let mut handler = RelayHandler::new(block);
     let (config_ready_tx, mut config_ready_rx) = mpsc::channel(CONFIG_CHANNEL_SIZE);
     handler.run_client(client_config, config_ready_tx);
 
