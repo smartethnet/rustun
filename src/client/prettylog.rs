@@ -19,7 +19,6 @@ pub fn log_handshake_success(config: &HandshakeReplyFrame) {
     println!("Virtual IP address: {}", config.private_ip);
     println!("Network mask: {}", config.mask);
     println!("Gateway: {}", config.gateway);
-    println!("IPv6: {}", config.ipv6);
     println!("Peer nodes: {}", config.others.len());
     if !config.others.is_empty() {
         for (idx, peer) in config.others.iter().enumerate() {

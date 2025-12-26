@@ -37,6 +37,10 @@ pub(crate) enum FrameType {
     HandshakeReply = 4,
     /// Peer update notification (Type 5)
     PeerUpdate = 5,
+    /// Probing ipv6
+    ProbeIPv6 = 6,
+    /// Probing hole punch
+    ProbeHolePunch = 7,
 }
 
 impl TryFrom<u8> for FrameType {
@@ -57,6 +61,8 @@ impl TryFrom<u8> for FrameType {
             0x03 => Ok(FrameType::Data),
             0x04 => Ok(FrameType::HandshakeReply),
             0x05 => Ok(FrameType::PeerUpdate),
+            0x06 => Ok(FrameType::ProbeIPv6),
+            0x07 => Ok(FrameType::ProbeHolePunch),
             _ => Err(FrameError::Invalid),
         }
     }
@@ -84,6 +90,8 @@ pub enum Frame {
     PeerUpdate(PeerUpdateFrame),
     /// Tunneled IP packet data
     Data(DataFrame),
+    ProbeIPv6(ProbeIPv6Frame),
+    ProbeHolePunch(ProbeHolePunchFrame),
 }
 
 impl Display for Frame {
@@ -97,9 +105,12 @@ impl Display for Frame {
             Frame::HandshakeReply(frame) => {
                 write!(f, "handshake reply with {} others", frame.others.len())
             }
-            Frame::KeepAlive(_frame) => write!(f, "keepalive"),
+            Frame::KeepAlive(frame) => write!(f, "keepalive, ipv6 {}:{} stun: {}:{}",
+                                              frame.ipv6, frame.port, frame.stun_ip, frame.stun_port),
             Frame::PeerUpdate(frame) => write!(f, "peer update for {}", frame.identity),
             Frame::Data(frame) => write!(f, "data with payload size {}", frame.payload.len()),
+            Frame::ProbeIPv6(frame)=> write!(f, "{} probe ipv6", frame.identity),
+            Frame::ProbeHolePunch(frame)=>write!(f, "{} probe hole punch", frame.identity),
         }
     }
 }
@@ -124,10 +135,6 @@ pub struct HandshakeFrame {
     /// - Look up network configuration (private IP, CIDR ranges)
     /// - Determine cluster membership for multi-tenancy
     pub identity: String,
-
-    /// Public IPv6
-    pub ipv6: String,
-    pub port: u16,
 }
 
 /// Handshake reply frame sent by server in response to client handshake
@@ -157,11 +164,6 @@ pub struct HandshakeReplyFrame {
     /// Each RouteItem contains routing information for a peer node,
     /// allowing this client to establish routes to other VPN members
     pub others: Vec<RouteItem>,
-
-    /// Public IPv6
-    ///
-    /// Others will try to connect IPv6 directly
-    pub ipv6: String,
 }
 
 /// Routing information for a peer node
@@ -186,6 +188,9 @@ pub struct RouteItem {
     pub ipv6: String,
 
     pub port: u16,
+
+    pub stun_ip: String,
+    pub stun_port: u16,
 }
 
 /// Keep-alive frame for connection health monitoring
@@ -212,6 +217,10 @@ pub struct KeepAliveFrame {
     
     /// UDP port for P2P connections
     pub port: u16,
+
+    pub stun_ip: String,
+
+    pub stun_port: u16,
 }
 
 /// Peer update notification frame sent by server
@@ -232,6 +241,20 @@ pub struct PeerUpdateFrame {
     
     /// Updated UDP port
     pub port: u16,
+
+    pub stun_ip: String,
+
+    pub stun_port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeIPv6Frame {
+    pub identity: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeHolePunchFrame {
+    pub identity: String,
 }
 
 /// Data frame containing tunneled IP packets

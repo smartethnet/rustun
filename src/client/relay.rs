@@ -1,4 +1,3 @@
-use crate::client::P2P_UDP_PORT;
 use crate::client::Args;
 use crate::client::prettylog::log_handshake_success;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
@@ -22,6 +21,8 @@ pub struct RelayClientConfig {
     pub identity: String,
     pub ipv6: String,
     pub port: u16,
+    pub stun_ip: String,
+    pub stun_port: u16,
 }
 
 pub struct RelayClient {
@@ -53,16 +54,20 @@ impl RelayClient {
         // IPv6 update interval (check every 5 minutes)
         let mut ipv6_update_ticker = interval(Duration::from_secs(300));
         ipv6_update_ticker.tick().await; // Skip first immediate tick
-        
+
         let mut current_ipv6 = self.cfg.ipv6.clone();
-        
+        let port = self.cfg.port;
+        let stun_ip = self.cfg.stun_ip.clone();
+        let stun_port = self.cfg.stun_port;
         loop {
             tokio::select! {
                 _ = keepalive_ticker.tick() => {
                     let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
                         identity: self.cfg.identity.clone(),
                         ipv6: current_ipv6.clone(),
-                        port: self.cfg.port,
+                        port,
+                        stun_ip: stun_ip.clone(),
+                        stun_port,
                     });
                     match conn.write_frame(keepalive_frame).await {
                         Ok(_) => {
@@ -84,10 +89,10 @@ impl RelayClient {
                     if let Some(new_ipv6) = utils::get_ipv6() {
                         tracing::info!("IPv6 address updated: {} -> {}", current_ipv6, new_ipv6);
                         current_ipv6 = new_ipv6.clone();
-                        self.cfg.ipv6 = new_ipv6;
                     } else {
                         tracing::debug!("Failed to retrieve IPv6 address during update check");
                     }
+                    // TODO：get stun port
                 }
                 
                 // inbound
@@ -156,8 +161,6 @@ impl RelayClient {
     async fn handshake(&self, conn: &mut Box<dyn Connection>) -> crate::Result<HandshakeReplyFrame> {
         conn.write_frame(Frame::Handshake(HandshakeFrame {
             identity: self.cfg.identity.clone(),
-            ipv6: self.cfg.ipv6.clone(),
-            port: self.cfg.port,
         }))
         .await?;
 
@@ -290,8 +293,9 @@ impl RelayHandler {
     }
 }
 
-pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::Result<(RelayHandler, HandshakeReplyFrame)> {
-    let ipv6 = utils::get_ipv6().unwrap_or("".to_string());
+pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>,
+                               ipv6: String, port: u16,
+                               stun_ip: String, stun_port: u16)->crate::Result<(RelayHandler, HandshakeReplyFrame)> {
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
         keepalive_interval: Duration::from_secs(args.keepalive_interval),
@@ -299,7 +303,9 @@ pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>)->crate::
         keep_alive_thresh: args.keepalive_threshold,
         identity: args.identity.clone(),
         ipv6,
-        port: P2P_UDP_PORT,
+        port,
+        stun_ip,
+        stun_port
     };
 
     let mut handler = RelayHandler::new(block);

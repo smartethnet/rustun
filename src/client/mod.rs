@@ -12,6 +12,8 @@ pub mod stun;
 /// It should match the port configured in keepalive frames and handshake.
 pub const P2P_UDP_PORT: u16 = 51258;
 
+pub const P2P_HOLE_PUNCH_PORT: u16 = 51259;
+
 const DEFAULT_MTU: u16 = 1430;
 
 /// Rustun VPN Client

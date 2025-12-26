@@ -95,26 +95,45 @@ impl ConnectionManager {
     /// # Returns
     /// * `Some(Vec<ConnectionMeta>)` - List of other connections in the cluster if the address changed
     /// * `None` - If the address didn't change or the connection wasn't found
-    pub fn update_connection_info(&self, cluster: &str, identity: &String, ipv6: String, port: u16) -> Option<Vec<ConnectionMeta>> {
+    pub fn update_connection_info(&self, cluster: &str, identity: &String,
+                                  ipv6: String, port: u16,
+                                  stun_ip: String, stun_port: u16) -> Option<Vec<ConnectionMeta>> {
         let mut cluster_map = self
             .cluster_connections
             .write()
             .unwrap_or_else(|e| e.into_inner());
 
         if let Some(connections) = cluster_map.get_mut(cluster)
-            && let Some(conn) = connections.iter_mut().find(|c| c.identity == *identity)
-            && (conn.ipv6 != ipv6 || conn.port != port) {
+            && let Some(conn) = connections.iter_mut().find(|c| c.identity == *identity) {
+            let mut changed = false;
+            if conn.ipv6 != ipv6 || conn.port != port {
+                conn.ipv6 = ipv6.clone();
+                conn.port = port;
+                changed = true;
+            }
+
+            if conn.stun_ip!= stun_ip || conn.stun_port != stun_port {
+                changed = true;
+                conn.stun_ip = stun_ip.clone();
+                conn.stun_port = stun_port;
+            }
+
+            if !changed {
+                return None;
+            }
+
             tracing::info!(
-                "Updated connection info for {}: {}:{} -> {}:{}",
+                "Updated connection info for {}: {}:{} -> {}:{}\n stun: {}:{} -> {}:{}",
                 identity,
                 conn.ipv6,
                 conn.port,
                 ipv6,
-                port
+                port,
+                conn.stun_ip,
+                conn.stun_port,
+                stun_ip,
+                stun_port
             );
-            conn.ipv6 = ipv6;
-            conn.port = port;
-            
             // Return other connections in the cluster (excluding the updated one)
             let others: Vec<ConnectionMeta> = connections
                 .iter()

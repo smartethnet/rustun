@@ -80,6 +80,16 @@ impl Parser {
                     total_len,
                 ))
             }
+
+            FrameType::ProbeIPv6 => {
+                let probe: ProbeIPv6Frame = Self::decrypt_and_deserialize(payload, block)?;
+                Ok((Frame::ProbeIPv6(probe), total_len))
+            }
+
+            FrameType::ProbeHolePunch => {
+                let probe: ProbeHolePunchFrame = Self::decrypt_and_deserialize(payload, block)?;
+                Ok((Frame::ProbeHolePunch(probe), total_len))
+            }
         }
     }
 
@@ -219,6 +229,28 @@ impl Parser {
                 block.encrypt(&mut data.payload)?;
                 let mut buf = Self::build_header(FrameType::Data, data.payload.len() as u16);
                 buf.extend_from_slice(&data.payload);
+                Ok(buf)
+            }
+
+            Frame::ProbeIPv6(frame) => {
+                let payload = Self::serialize_and_encrypt(
+                    &frame,
+                    block,
+                    "failed to marshal probe ipv6",
+                )?;
+                let mut buf = Self::build_header(FrameType::ProbeIPv6, payload.len() as u16);
+                buf.extend_from_slice(&payload);
+                Ok(buf)
+            }
+
+            Frame::ProbeHolePunch(frame) => {
+                let payload = Self::serialize_and_encrypt(
+                    &frame,
+                    block,
+                    "failed to marshal probe hole punch",
+                )?;
+                let mut buf = Self::build_header(FrameType::ProbeHolePunch, payload.len() as u16);
+                buf.extend_from_slice(&payload);
                 Ok(buf)
             }
         }

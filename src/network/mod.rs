@@ -116,6 +116,9 @@ pub struct ConnectionMeta {
     /// ipv6
     pub ipv6: String,
     pub port: u16,
+    // hole punch address
+    pub stun_ip: String,
+    pub stun_port: u16,
 }
 
 impl PartialEq<ConnectionMeta> for &ConnectionMeta {

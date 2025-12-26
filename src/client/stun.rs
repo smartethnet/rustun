@@ -119,6 +119,7 @@ impl StunClient {
             "stun1.l.google.com:19302".to_string(),
             "stun2.l.google.com:19302".to_string(),
             "stun3.l.google.com:19302".to_string(),
+            "global.stun.twilio.com:3478".to_string(),
         ])
     }
     
@@ -169,7 +170,7 @@ impl StunClient {
     ///     .await?;
     /// println!("Public address: {}:{}", public_ip, public_port);
     /// ```
-    pub async fn discover_public_address(&self, local_port: u16) -> Result<(IpAddr, u16)> {
+    pub async fn discover_public_address(&self, local_port: u16) -> Result<(SocketAddr, IpAddr, u16)> {
         let local_addr = if local_port == 0 {
             "0.0.0.0:0"
         } else {
@@ -181,14 +182,14 @@ impl StunClient {
             tracing::debug!("Querying STUN server: {}", stun_server);
             
             match self.query_stun_server(local_addr, stun_server).await {
-                Ok((ip, port)) => {
+                Ok((local, ip, port)) => {
                     tracing::info!(
                         "STUN discovery successful via {}: {}:{}",
                         stun_server,
                         ip,
                         port
                     );
-                    return Ok((ip, port));
+                    return Ok((local, ip, port));
                 }
                 Err(e) => {
                     tracing::warn!("STUN query to {} failed: {}", stun_server, e);
@@ -220,30 +221,28 @@ impl StunClient {
     /// println!("NAT Type: {:?}", result.nat_type);
     /// ```
     pub async fn discover(&self, local_port: u16) -> Result<StunDiscoveryResult> {
-        let local_addr = SocketAddr::new("0.0.0.0".parse().unwrap(), local_port);
-        
         // Step 1: Discover public address
-        let (public_ip, public_port) = self.discover_public_address(local_port)
+        let (local_addr, public_ip, public_port) = self.discover_public_address(local_port)
             .await
             .context("Failed to discover public address")?;
-        
+
         tracing::debug!(
             "Public address discovered: {}:{} (local: {})",
             public_ip,
             public_port,
-            local_addr
+            local_addr.to_string(),
         );
         
         // Step 2: Detect NAT type
         // For now, use a simplified detection based on address comparison
-        let nat_type = self.detect_nat_type_simple(local_addr, public_ip, public_port).await;
+        let nat_type = self.detect_nat_type_simple(local_addr.clone(), public_ip, public_port).await;
         
         tracing::info!(
             "NAT type detected: {:?} ({})",
             nat_type,
             nat_type.description()
         );
-        
+
         Ok(StunDiscoveryResult {
             public_ip,
             public_port,
@@ -257,13 +256,13 @@ impl StunClient {
         &self,
         local_addr: &str,
         stun_server: &str,
-    ) -> Result<(IpAddr, u16)> {
+    ) -> Result<(SocketAddr, IpAddr, u16)> {
         use std::net::UdpSocket;
         
         // Create UDP socket
         let socket = UdpSocket::bind(local_addr)
             .context("Failed to bind UDP socket")?;
-        
+        let local_addr = socket.local_addr()?;
         // Set socket timeout
         socket.set_read_timeout(Some(self.timeout))
             .context("Failed to set socket timeout")?;
@@ -294,7 +293,7 @@ impl StunClient {
         .context("STUN query task panicked")?
         .context("Failed to get external address")?;
         
-        Ok((external_addr.ip(), external_addr.port()))
+        Ok((local_addr, external_addr.ip(), external_addr.port()))
     }
     
     /// Simplified NAT type detection based on address comparison
@@ -395,7 +394,7 @@ mod tests {
         
         // This test is ignored by default as it requires internet access
         // Run with: cargo test test_stun_discovery -- --ignored
-        if let Ok((ip, port)) = result {
+        if let Ok((_, ip, port)) = result {
             println!("Discovered public address: {}:{}", ip, port);
             assert!(port > 0);
         }

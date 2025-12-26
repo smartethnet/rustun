@@ -1,5 +1,5 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Clone)]
 pub struct DeviceConfig {
@@ -29,7 +29,7 @@ impl Device {
         }
     }
 
-    pub async fn run(&mut self) -> crate::Result<()> {
+    pub async fn run(&mut self, ready: oneshot::Sender<()>) -> crate::Result<()> {
         let mut config = tun::Configuration::default();
         config
             .address(self.config.ip.clone())
@@ -50,6 +50,7 @@ impl Device {
             }
         };
 
+        let _ = ready.send(());
         let mut buf = vec![0; 2048];
         loop {
             tokio::select! {
@@ -92,21 +93,23 @@ impl DeviceHandler {
         }
     }
 
-    pub fn run(&mut self, cfg: DeviceConfig) -> crate::Result<()> {
+    pub async fn run(&mut self, cfg: DeviceConfig) -> crate::Result<()> {
         let (inbound_tx, inbound_rx) = mpsc::channel(1000);
         let (outbound_tx, outbound_rx) = mpsc::channel(1000);
         self.inbound_rx = Some(inbound_rx);
         self.outbound_tx = Some(outbound_tx);
 
         let mut dev = Device::new(cfg, inbound_tx, outbound_rx);
+        let (ready_tx, ready_rx) = oneshot::channel();
         tokio::spawn(async move {
-            let res = dev.run().await;
+            let res = dev.run(ready_tx).await;
             match res {
                 Ok(_) => (),
                 Err(e) => tracing::error!("device handler fail: {:?}", e),
             }
         });
 
+        let _ = ready_rx.await;
         Ok(())
     }
 

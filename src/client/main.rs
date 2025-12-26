@@ -2,10 +2,11 @@ use clap::Parser;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
-use crate::client::{Args, DEFAULT_MTU, P2P_UDP_PORT};
+use crate::client::{Args, DEFAULT_MTU, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::client::relay::{RelayHandler, new_relay_handler};
 use crate::client::peer::{PeerHandler};
 use crate::client::prettylog::{log_startup_banner};
+use crate::client::stun::StunClient;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block};
 use crate::utils;
@@ -33,8 +34,20 @@ pub async fn run_client() {
     let block = crypto::new_block(&crypto_config);
     let crypto_block: Arc<Box<dyn Block>> = Arc::new(block);
 
+    let ipv6 = utils::get_ipv6().unwrap_or(String::new());
+    let stun_result = StunClient::new().discover(P2P_HOLE_PUNCH_PORT).await;
+    let (stun_ip, stun_port) = match stun_result {
+        Ok(result) => (result.public_ip.to_string(), result.public_port),
+        Err(_) => {
+            ("".to_string(), 0)
+        }
+    };
+
     // create relay handler
-    let (mut relay_handler, device_config) = match new_relay_handler(&args, crypto_block.clone()).await {
+    let (mut relay_handler, device_config) = match new_relay_handler(&args, crypto_block.clone(),
+                                                                     ipv6, P2P_UDP_PORT,
+                                                                     stun_ip,
+                                                                     stun_port).await {
         Ok(result) => result,
         Err(e) => {
             tracing::error!("Failed to setup client: {}", e);
@@ -45,15 +58,14 @@ pub async fn run_client() {
     // Initialize P2P handler if enabled
     let mut peer_handler = if args.enable_p2p {
         tracing::info!("P2P mode enabled");
+
         let mut handler = PeerHandler::new(
             crypto_block.clone(),
             args.identity.clone(),
-            device_config.ipv6.clone(),
-            P2P_UDP_PORT,
         );
         handler.run_peer();
         handler.add_peers(device_config.others.clone()).await;
-        handler.start_keepalive_timer().await;
+        handler.start_probe_timer().await;
         Some(handler)
     } else {
         tracing::info!("P2P mode disabled, using relay only");
@@ -61,7 +73,7 @@ pub async fn run_client() {
     };
 
     // initialize TUN device
-    let mut dev = match init_device(&device_config) {
+    let mut dev = match init_device(&device_config).await {
         Ok(d) => d,
         Err(e) => {
             tracing::error!("Failed to initialize device: {}", e);
@@ -73,14 +85,14 @@ pub async fn run_client() {
     run_event_loop(&mut relay_handler, &mut peer_handler, &mut dev).await;
 }
 
-fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandler> {
+async fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandler> {
     let mut dev = DeviceHandler::new();
     dev.run(DeviceConfig {
         ip: device_config.private_ip.clone(),
         mask: device_config.mask.clone(),
         gateway: device_config.gateway.clone(),
         mtu: DEFAULT_MTU,
-    })?;
+    }).await?;
 
     // Add system routes for peers
     let sys_route = SysRoute::new();
@@ -141,15 +153,19 @@ async fn run_event_loop(
                         }
                         Ok(Frame::PeerUpdate(peer_update)) => {
                             tracing::info!(
-                                "Peer update received: {} -> {}:{}",
+                                "Peer update received: {} -> {}:{}\n stun: {}:{}",
                                 peer_update.identity,
                                 peer_update.ipv6,
-                                peer_update.port
+                                peer_update.port,
+                                peer_update.stun_ip,
+                                peer_update.stun_port,
                             );
                             peer_handler.update_peer(
                                 peer_update.identity,
                                 peer_update.ipv6,
-                                peer_update.port
+                                peer_update.port,
+                                peer_update.stun_ip,
+                                peer_update.stun_port,
                             ).await;
                         }
                         _ => {}
@@ -223,29 +239,39 @@ async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>) {
             for (idx, status) in peer_status.iter().enumerate() {
                 let is_last = idx == peer_status.len() - 1;
                 let prefix = if is_last { "└─" } else { "├─" };
+                let continuation = if is_last { " " } else { "│" };
                 
-                // Format connection state
-                let state = match (&status.addr, &status.last_active) {
-                    (None, _) => "❌ Unknown Address".to_string(),
-                    (Some(_), None) => "⏳ Connecting...".to_string(),
-                    (Some(_), Some(last)) => {
+                println!("   {} Peer: {}", prefix, status.identity);
+                
+                // IPv6 Direct Connection
+                let ipv6_state = match (&status.ipv6_addr, &status.ipv6_last_active) {
+                    (None, _) => "❌ No Address".to_string(),
+                    (Some(addr), None) => format!("⏳ Connecting... ({})", addr),
+                    (Some(addr), Some(last)) => {
                         let elapsed = last.elapsed().as_secs();
                         if elapsed < 15 {
-                            format!("✅ Active ({}s ago)", elapsed)
+                            format!("✅ Active ({}s ago, {})", elapsed, addr)
                         } else {
-                            format!("⚠️  Inactive ({}s ago)", elapsed)
+                            format!("⚠️  Inactive ({}s ago, {})", elapsed, addr)
                         }
                     }
                 };
+                println!("   {}    ├─ IPv6:  {}", continuation, ipv6_state);
                 
-                // Format address
-                let addr_str = status.addr
-                    .map(|a| format!("{}", a))
-                    .unwrap_or_else(|| "N/A".to_string());
-                
-                println!("   {} Peer: {}", prefix, status.identity);
-                println!("   {}    Address: {}", if is_last { " " } else { "│" }, addr_str);
-                println!("   {}    Status:  {}", if is_last { " " } else { "│" }, state);
+                // STUN Hole-Punched Connection
+                let stun_state = match (&status.stun_addr, &status.stun_last_active) {
+                    (None, _) => "❌ No Address".to_string(),
+                    (Some(addr), None) => format!("⏳ Connecting... ({})", addr),
+                    (Some(addr), Some(last)) => {
+                        let elapsed = last.elapsed().as_secs();
+                        if elapsed < 15 {
+                            format!("✅ Active ({}s ago, {})", elapsed, addr)
+                        } else {
+                            format!("⚠️  Inactive ({}s ago, {})", elapsed, addr)
+                        }
+                    }
+                };
+                println!("   {}    └─ STUN:  {}", continuation, stun_state);
             }
         }
     } else {

@@ -135,7 +135,6 @@ impl Handler {
                 mask: client_config.mask.clone(),
                 gateway: client_config.gateway.clone(),
                 others: route_items,
-                ipv6: hs.ipv6.clone(),
             }))
             .await?;
 
@@ -147,8 +146,10 @@ impl Handler {
             gateway: client_config.gateway.clone(),
             ciders: client_config.ciders.clone(),
             outbound_tx: self.outbound_tx.clone(),
-            ipv6: "".to_string(), // Do not set ipv6 and port here, it will be set in the keepalive frame
-            port: 0, 
+            ipv6: "".to_string(), // Do not set, it will be set in the keepalive frame
+            port: 0,
+            stun_ip: "".to_string(),
+            stun_port: 0,
         };
         tracing::debug!("handshake completed with {:?}", meta);
 
@@ -218,21 +219,24 @@ impl Handler {
         others
             .iter()
             .map(|client| {
-                let (ipv6, port) = match self.connection_manager
+                let (ipv6, port, stun_ip, stun_port) = match self.connection_manager
                     .get_connection_by_identity(cluster, &client.identity) {
                     Some(c) => {
-                        (c.ipv6, c.port)
+                        (c.ipv6, c.port, c.stun_ip, c.stun_port)
                     },
                     None => {
-                        ("".to_string(), 0)
+                        ("".to_string(), 0, "".to_string(), 0)
                     }
                 };
+
                 RouteItem {
                     identity: client.identity.clone(),
                     private_ip: client.private_ip.clone(),
                     ciders: client.ciders.clone(),
                     ipv6,
                     port,
+                    stun_ip,
+                    stun_port,
                 }
             })
             .collect()
@@ -241,8 +245,9 @@ impl Handler {
     async fn handle_frame(&mut self, frame: Frame) {
         match frame {
             Frame::KeepAlive(frame) => {
-                tracing::debug!("on keepalive from {}", frame.identity);
-                
+                tracing::info!("on keepalive from {} {}:{} {}:{}",
+                    frame.identity, frame.ipv6, frame.port, frame.stun_ip, frame.stun_port);
+
                 // Update connection metadata with latest IPv6 and port from keepalive
                 // If the address changed, notify other clients in the cluster
                 if let Some(cluster) = &self.cluster {
@@ -251,6 +256,8 @@ impl Handler {
                         &frame.identity,
                         frame.ipv6.clone(),
                         frame.port,
+                        frame.stun_ip.clone(),
+                        frame.stun_port,
                     ) {
                         // Address changed, notify all other clients in the cluster
                         tracing::info!(
@@ -265,6 +272,8 @@ impl Handler {
                             identity: frame.identity.clone(),
                             ipv6: frame.ipv6.clone(),
                             port: frame.port,
+                            stun_ip: frame.stun_ip.clone(),
+                            stun_port: frame.stun_port,
                         });
                         
                         for conn in other_connections {

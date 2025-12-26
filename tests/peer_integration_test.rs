@@ -340,7 +340,7 @@ async fn test_peer_periodic_keepalive() {
     peer_handler.add_peers(routes).await;
 
     // Start keepalive timer
-    peer_handler.start_keepalive_timer().await;
+    peer_handler.start_probe_timer().await;
 
     // Receive initial keepalive (from add_peers)
     tracing::info!("Receiving initial keepalive...");
