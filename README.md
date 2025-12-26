@@ -31,7 +31,8 @@ A high-performance VPN tunnel implementation written in Rust.
 - ⚡ **Simple & Fast** - One command to start: `./client -s SERVER:8080 -i client-001`
 - 🏢 **Multi-Tenant** - Cluster-based isolation for multiple teams or business units
 - 🔐 **Secure Encryption** - ChaCha20-Poly1305 (default), AES-256-GCM, XOR/Plain options
-- 🚀 **High Performance** - P2P direct connection with auto-fallback to relay mode
+- 🚀 **Dual-Path P2P** - IPv6 direct connection + STUN hole punching with auto-fallback to relay
+- 🌐 **Smart Routing** - Automatic path selection: IPv6 (lowest latency) → STUN (NAT traversal) → Relay
 - 🌍 **Cross-Platform** - Linux, macOS, Windows with pre-built binaries
 
 ## 📋 Table of Contents
@@ -288,28 +289,132 @@ Options:
 
 ### P2P Direct Connection
 
-By default, all traffic goes through the relay server. Enable P2P for direct IPv6 connections between clients:
+Rustun supports **dual-path P2P networking** for optimal performance and connectivity:
+
+#### 🌟 Connection Modes
 
 ```bash
-# Enable P2P direct connection
+# Enable P2P with dual-path support
 ./client -s SERVER:8080 -i client-001 --enable-p2p
 ```
 
-**P2P Benefits:**
-- 🚀 Lower latency (direct peer-to-peer)
-- 📉 Reduced server bandwidth usage
-- ⚡ Automatic fallback to relay if P2P fails
+**Three-tier connection strategy:**
 
-**Requirements:**
-- Both clients must have IPv6 connectivity
-- Both clients must use `--enable-p2p` flag
-- UDP port 51258 must be accessible (configurable via `P2P_UDP_PORT` constant)
+1. **🌐 IPv6 Direct Connection** (Primary Path)
+   - Lowest latency, highest throughput
+   - Works when both peers have global IPv6 addresses
+   - UDP port 51258 (configurable via `P2P_UDP_PORT`)
 
-**How it works:**
-1. Clients exchange IPv6 addresses via server
-2. Keepalive packets establish direct connection
-3. Data sent via P2P when connection is active
-4. Automatic fallback to relay if P2P fails
+2. **📡 STUN Hole Punching** (Secondary Path)
+   - NAT traversal for IPv4 networks
+   - Automatic public IP/port discovery
+   - Works behind most NAT types
+   - UDP port 51259 (configurable via `P2P_HOLE_PUNCH_PORT`)
+
+3. **🔄 Relay Mode** (Fallback)
+   - Guaranteed connectivity via central server
+   - Automatic fallback when P2P fails
+   - Works in all network conditions
+
+#### ✨ Key Benefits
+
+- **🎯 Smart Routing**: Automatically selects the best available path
+  - IPv6 available & active (< 15s) → Use IPv6
+  - IPv6 expired, STUN active → Use STUN
+  - Both expired → Use Relay
+- **⚡ Zero Configuration**: Addresses exchanged automatically via server
+- **🔄 Dynamic Failover**: Seamless fallback between paths
+- **📊 Real-time Status**: Monitor connection health with status command
+
+#### 🔧 How It Works
+
+```
+Initial Setup:
+  Client A ←--Handshake--→ Server ←--Handshake--→ Client B
+                 ↓
+         Exchange addresses:
+         - IPv6: [2001:db8::1]:51258
+         - STUN: 203.0.113.45:51259
+
+Ongoing Communication:
+  1. Try IPv6:    [2001:db8::1]:51258  → [2001:db8::2]:51258
+     └─ If active (< 15s) → ✅ Use IPv6 (fastest)
+     
+  2. Try STUN:    203.0.113.45:51259   → 198.51.100.89:51259
+     └─ If active (< 15s) → ✅ Use STUN (NAT traversal)
+     
+  3. Fallback:    Client A ──→ Server ──→ Client B
+     └─ Always available → ✅ Use Relay (guaranteed)
+
+Health Monitoring:
+  - Keepalive probes every 10 seconds (both IPv6 & STUN)
+  - Connection timeout: 15 seconds
+  - Automatic path re-selection on failure
+```
+
+#### 📋 Requirements
+
+**For IPv6 Direct Connection:**
+- Both clients have global IPv6 addresses
+- UDP port 51258 accessible
+- Both clients use `--enable-p2p` flag
+
+**For STUN Hole Punching:**
+- IPv4 connectivity
+- UDP port 51259 accessible
+- Compatible NAT type (works with most routers)
+- Both clients use `--enable-p2p` flag
+
+**Note:** If neither IPv6 nor STUN works, traffic automatically falls back to relay mode.
+
+#### 💡 Usage Examples
+
+```bash
+# Basic P2P (IPv6 + STUN)
+./client -s SERVER:8080 -i client-001 --enable-p2p
+
+# With custom encryption
+./client -s SERVER:8080 -i client-001 --enable-p2p -c chacha20:my-key
+
+# Check connection status (press 's' in interactive mode)
+# Shows IPv6 and STUN connection health for each peer
+```
+
+#### 📊 Connection Status Output
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║                        CONNECTION STATUS                             ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+📡 Relay Connection (TCP)
+   ├─ RX Frames:  1234 (Errors: 0)
+   └─ TX Frames:  5678 (Errors: 1)
+
+🔗 P2P Connections (UDP): 2 peers
+   ├─ Peer: client-002
+   │    ├─ IPv6:  ✅ Active (5s ago, [2001:db8::2]:51258)
+   │    └─ STUN:  ✅ Active (8s ago, 203.0.113.45:60001)
+   └─ Peer: client-003
+        ├─ IPv6:  ⚠️  Inactive (20s ago, [2001:db8::3]:51258)
+        └─ STUN:  ✅ Active (3s ago, 198.51.100.89:60002)
+```
+
+#### 🔍 Troubleshooting
+
+**IPv6 connection not working?**
+- Check if both clients have IPv6: `curl -6 ifconfig.me`
+- Verify firewall allows UDP 51258
+
+**STUN connection not working?**
+- Check NAT type: Some symmetric NATs may not work
+- Verify firewall allows UDP 51259
+- Check if STUN server is reachable
+
+**Both failing?**
+- Relay mode will automatically activate
+- Check server connectivity
+- Verify encryption keys match
 
 ### Example: Multi-Tenant Setup
 
@@ -361,8 +466,10 @@ ping 10.0.2.2  # From sh-office-gw to sh-db-server
 
 ## 🗺️ Roadmap
 
-- [x] **IPv6 support** - ✅ Completed
-- [x] **P2P direct connection** - ✅ Completed (IPv6 P2P with auto fallback)
+- [x] **IPv6 P2P support** - ✅ Completed (IPv6 direct connection)
+- [x] **STUN hole punching** - ✅ Completed (NAT traversal for IPv4)
+- [x] **Dual-path networking** - ✅ Completed (IPv6 + STUN with intelligent failover)
+- [x] **Real-time connection monitoring** - ✅ Completed (Per-path health status)
 - [ ] Windows service support
 - [ ] systemd integration for Linux
 - [ ] Web-based management dashboard
