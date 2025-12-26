@@ -4,7 +4,7 @@ use std::time::Duration;
 use tokio::time::interval;
 use crate::client::{Args, DEFAULT_MTU, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::client::relay::{RelayHandler, new_relay_handler};
-use crate::client::peer::{PeerHandler};
+use crate::client::p2p::peer::{PeerHandler};
 use crate::client::prettylog::{log_startup_banner};
 use crate::client::stun::StunClient;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};

@@ -3,8 +3,8 @@ use clap::Parser;
 mod relay;
 pub mod main;
 mod prettylog;
-pub mod peer;
 pub mod stun;
+mod p2p;
 
 /// Default P2P UDP port for client-to-client direct connections
 ///
