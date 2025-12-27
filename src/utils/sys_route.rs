@@ -10,9 +10,10 @@ impl SysRoute {
     /// Add routes to the system routing table
     /// - dsts: destination CIDR addresses (e.g., ["192.168.1.0/24", "10.0.0.0/8"])
     /// - gateway: gateway IP address
-    pub fn add(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
+    /// - interface_idx: optional interface index (Windows only)
+    pub fn add(&self, dsts: Vec<String>, gateway: String, interface_idx: Option<i32>) -> crate::Result<()> {
         for dst in dsts {
-            self.add_route(&dst, &gateway)?
+            self.add_route(&dst, &gateway, interface_idx)?
         }
         Ok(())
     }
@@ -20,16 +21,17 @@ impl SysRoute {
     /// Delete routes from the system routing table
     /// - dsts: destination CIDR addresses
     /// - gateway: gateway IP address
+    /// - interface_idx: optional interface index (Windows only)
     #[allow(unused)]
-    pub fn del(&self, dsts: Vec<String>, gateway: String) -> crate::Result<()> {
+    pub fn del(&self, dsts: Vec<String>, gateway: String, interface_idx: Option<i32>) -> crate::Result<()> {
         for dst in dsts {
-            self.del_route(&dst, &gateway)?
+            self.del_route(&dst, &gateway, interface_idx)?
         }
         Ok(())
     }
 
     #[cfg(target_os = "linux")]
-    fn add_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
+    fn add_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
         let output = Command::new("ip")
             .args(["route", "add", dst, "via", gateway])
             .output()
@@ -43,7 +45,7 @@ impl SysRoute {
     }
 
     #[cfg(target_os = "linux")]
-    fn del_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
+    fn del_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
         let output = Command::new("ip")
             .args(["route", "del", dst, "via", gateway])
             .output()
@@ -57,7 +59,7 @@ impl SysRoute {
     }
 
     #[cfg(target_os = "macos")]
-    fn add_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
+    fn add_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
         let output = Command::new("route")
             .args(["-n", "add", "-net", dst, gateway])
             .output()
@@ -71,7 +73,7 @@ impl SysRoute {
     }
 
     #[cfg(target_os = "macos")]
-    fn del_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
+    fn del_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
         let output = Command::new("route")
             .args(["-n", "delete", "-net", dst, gateway])
             .output()
@@ -85,33 +87,59 @@ impl SysRoute {
     }
 
     #[cfg(target_os = "windows")]
-    fn add_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
-        // Windows route command format: route add <network> mask <netmask> <gateway>
+    fn add_route(&self, dst: &str, gateway: &str, interface_idx: Option<i32>) -> crate::Result<()> {
+        // Windows route command format: route add <network> mask <netmask> <gateway> if <interface_idx> metric 1
         let (network, mask) = self.parse_cidr(dst)?;
 
+        let mut args = vec!["add", &network, "mask", &mask, gateway];
+        
+        // Add interface index if provided
+        let idx_str;
+        if let Some(idx) = interface_idx {
+            idx_str = idx.to_string();
+            args.push("if");
+            args.push(&idx_str);
+        }
+        
+        // Always use metric 1 for highest priority
+        args.push("metric");
+        args.push("1");
+
         let output = Command::new("route")
-            .args(&["add", &network, "mask", &mask, gateway])
+            .args(&args)
             .output()
             .map_err(|e| format!("Failed to execute route command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            // Ignore "already exists" error
+            if stderr.contains("already exists") || stderr.contains("已存在") {
+                tracing::debug!("Route already exists: {} via {}", dst, gateway);
+                return Ok(());
+            }
             return Err(format!("Failed to add route: {}", stderr).into());
         }
+        
+        tracing::debug!("Added route: {} via {} (interface: {:?})", dst, gateway, interface_idx);
         Ok(())
     }
 
     #[cfg(target_os = "windows")]
-    fn del_route(&self, dst: &str, gateway: &str) -> crate::Result<()> {
+    fn del_route(&self, dst: &str, _gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
         let (network, mask) = self.parse_cidr(dst)?;
 
         let output = Command::new("route")
-            .args(&["delete", &network, "mask", &mask, gateway])
+            .args(&["delete", &network, "mask", &mask])
             .output()
             .map_err(|e| format!("Failed to execute route command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            // Ignore "not found" error
+            if stderr.contains("not found") || stderr.contains("找不到") {
+                tracing::debug!("Route not found (already deleted): {}", dst);
+                return Ok(());
+            }
             return Err(format!("Failed to delete route: {}", stderr).into());
         }
         Ok(())

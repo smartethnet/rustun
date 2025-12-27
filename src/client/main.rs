@@ -86,18 +86,25 @@ pub async fn run_client() {
 }
 
 async fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandler> {
+    tracing::info!("Initializing device with config: {:?}", device_config);
     let mut dev = DeviceHandler::new();
-    dev.run(DeviceConfig {
+    let tun_index = dev.run(DeviceConfig {
         ip: device_config.private_ip.clone(),
         mask: device_config.mask.clone(),
         gateway: device_config.gateway.clone(),
         mtu: DEFAULT_MTU,
     }).await?;
 
+    // Log TUN index (Windows only)
+    if let Some(idx) = tun_index {
+        tracing::info!("TUN interface index: {}", idx);
+    }
+
     // Add system routes for peers
     let sys_route = SysRoute::new();
     for route_item in &device_config.others {
-        if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone()) {
+        tracing::info!("Add sys route item: {:?} via {}", route_item.ciders, device_config.private_ip);
+        if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone(), tun_index) {
             tracing::error!("Failed to add route for {:?}: {}", route_item, e);
         }
     }

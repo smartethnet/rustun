@@ -29,12 +29,12 @@ impl Device {
         }
     }
 
-    pub async fn run(&mut self, ready: oneshot::Sender<()>) -> crate::Result<()> {
+    pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>) -> crate::Result<()> {
         let mut config = tun::Configuration::default();
         config
             .address(self.config.ip.clone())
             .netmask(self.config.mask.clone())
-            .destination(self.config.gateway.clone())
+            // .destination(self.config.gateway.clone())
             .mtu(self.config.mtu)
             .up();
 
@@ -50,7 +50,14 @@ impl Device {
             }
         };
 
-        let _ = ready.send(());
+        // Get TUN interface index (Windows only)
+        #[cfg(target_os = "windows")]
+        let tun_index = dev.tun_index().ok();
+        
+        #[cfg(not(target_os = "windows"))]
+        let tun_index: Option<i32> = None;
+
+        let _ = ready.send(tun_index);
         let mut buf = vec![0; 2048];
         loop {
             tokio::select! {
@@ -93,7 +100,7 @@ impl DeviceHandler {
         }
     }
 
-    pub async fn run(&mut self, cfg: DeviceConfig) -> crate::Result<()> {
+    pub async fn run(&mut self, cfg: DeviceConfig) -> crate::Result<Option<i32>> {
         let (inbound_tx, inbound_rx) = mpsc::channel(1000);
         let (outbound_tx, outbound_rx) = mpsc::channel(1000);
         self.inbound_rx = Some(inbound_rx);
@@ -109,8 +116,8 @@ impl DeviceHandler {
             }
         });
 
-        let _ = ready_rx.await;
-        Ok(())
+        let tun_index = ready_rx.await.unwrap_or(None);
+        Ok(tun_index)
     }
 
     pub async fn recv(&mut self) -> Option<Vec<u8>> {
