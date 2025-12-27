@@ -6,6 +6,14 @@ pub mod device;
 pub mod sys_route;
 
 pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
+    // On Windows, disable ANSI colors to avoid garbage characters in console
+    // On Unix systems, keep ANSI colors for better readability
+    #[cfg(target_os = "windows")]
+    let use_ansi = false;
+    
+    #[cfg(not(target_os = "windows"))]
+    let use_ansi = true;
+
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
             .with_env_filter(
@@ -13,6 +21,7 @@ pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
                     .with_default_directive(LevelFilter::INFO.into())
                     .from_env_lossy(),
             )
+            .with_ansi(use_ansi)  // Disable ANSI colors on Windows
             .with_line_number(true)
             .with_file(true)
             .finish(),

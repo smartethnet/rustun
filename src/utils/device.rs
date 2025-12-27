@@ -1,5 +1,6 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
+use tun::AbstractDevice;
 
 #[derive(Clone)]
 pub struct DeviceConfig {
