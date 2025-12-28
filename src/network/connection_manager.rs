@@ -123,7 +123,7 @@ impl ConnectionManager {
             }
 
             tracing::info!(
-                "Updated connection info for {}: {}:{} -> {}:{}\n stun: {}:{} -> {}:{}",
+                "Updated connection info for {}: {}:{} -> {}:{} stun: {}:{} -> {}:{}",
                 identity,
                 conn.ipv6,
                 conn.port,

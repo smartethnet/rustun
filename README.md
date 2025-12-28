@@ -2,7 +2,7 @@
 
 <h1>🌐 Rustun</h1>
 
-<h3>A Modern VPN Tunnel in Rust</h3>
+<h3>AI-Driven Intelligent VPN Tunnel</h3>
 
 <br/>
 
@@ -15,11 +15,14 @@
 
 [🌐 Website](https://smartethnet.github.io) · [📖 Documentation](https://smartethnet.github.io) · [中文文档](./doc/README_CN.md) · [🐛 Report Bug](https://github.com/smartethnet/rustun/issues) · [✨ Request Feature](https://github.com/smartethnet/rustun/issues)
 
+**Platform Clients:**
+[📱 iOS](https://github.com/smartethnet/rustun-ios) · [🤖 Android](https://github.com/smartethnet/rustun-android) · [🪟 Windows](https://github.com/smartethnet/rustun) · [🍎 macOS](https://github.com/smartethnet/rustun) · [🐧 Linux](https://github.com/smartethnet/rustun)
+
 </div>
 
 ---
 
-A high-performance VPN tunnel implementation written in Rust.
+An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path selection and smart routing capabilities.
 
 **Status: Actively Developing** 🚧
 
@@ -37,92 +40,142 @@ A high-performance VPN tunnel implementation written in Rust.
 
 ## 📋 Table of Contents
 
+### For Users
 - [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [Download Pre-built Binaries](#download-pre-built-binaries)
-  - [Installation](#installation)
-  - [Quick Test](#quick-test)
+- [Installation](#installation)
 - [Configuration](#configuration)
-  - [Server Configuration](#server-configuration)
-  - [Client Routes Configuration](#client-routes-configuration)
 - [Usage](#usage)
-  - [Starting the Server](#starting-the-server)
-  - [Starting a Client](#starting-a-client)
-  - [Client Command-Line Options](#client-command-line-options)
-  - [Encryption Options](#encryption-options)
-  - [P2P Direct Connection](#p2p-direct-connection)
-  - [Example: Multi-Tenant Setup](#example-multi-tenant-setup)
+- [P2P Connections](#-p2p-direct-connection)
+- [Multi Tenant](#-multi-tenant-isolation)
+- [Use Cases](#-use-cases)
+
+### For Developers
+- [Build from Source](#build-from-source)
+- [Architecture](#architecture)
+- [Contributing](#contributing)
+
+### Roadmap
 - [Roadmap](#roadmap)
 
 ## 🚀 Quick Start
 
-> **💡 Tip:** Visit our [website](https://smartethnet.github.io) for an interactive demo and visual guide!
+### One-Click Installation (Recommended)
+
+**Server Installation:**
+
+```bash
+# Automatically installs the latest version
+curl -fsSL https://raw.githubusercontent.com/smartethnet/rustun/main/install.sh | sudo bash
+
+# Configure
+sudo vim /etc/rustun/server.toml
+sudo vim /etc/rustun/routes.json
+
+# Start service
+sudo systemctl start rustun-server
+sudo systemctl enable rustun-server
+```
+
+### Download Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/smartethnet/rustun/releases/latest)
+
+**Available Platforms:**
+- **Linux**: x86_64 (glibc/musl), ARM64 (glibc/musl)
+- **macOS**: Intel (x86_64), Apple Silicon (ARM64)
+- **Windows**: x86_64 (MSVC)
+
+**Each release includes:**
+- `server` - VPN server binary
+- `client` - VPN client binary
+- `server.toml.example` - Server configuration template
+- `routes.json.example` - Routes configuration template
 
 ### Prerequisites
 
 **All Platforms:**
-- TUN/TAP driver support
+- Root/Administrator privileges (required for TUN device and routing)
 
-**Windows:**
-- Download [Wintun driver](https://www.wintun.net/) (required for TUN device)
-- Administrator privileges
-
-**Linux/macOS:**
-- Root/sudo privileges (or set capabilities on Linux)
-
-### Download Pre-built Binaries
-
-**Download from [GitHub Releases](https://github.com/smartethnet/rustun/releases/latest)**
-
-Available for:
-- **Linux** - x86_64 (glibc/musl), ARM64 (glibc/musl)
-- **macOS** - Intel (x86_64), Apple Silicon (ARM64)
-- **Windows** - x86_64 (MSVC)
-
-Each release includes:
-- `server` - VPN server binary
-- `client` - VPN client binary
-- `server.toml.example` - Configuration example
-- `routes.json.example` - Routes example
-
-### Installation
+**Windows Only:**
+- [Wintun driver](https://www.wintun.net/) - extract `wintun.dll` to the same directory as binaries
 
 **Linux/macOS:**
-```bash
-# Download and extract (example for Linux x86_64)
-wget https://github.com/smartethnet/rustun/releases/download/0.0.1/rustun-0.0.1-x86_64-unknown-linux-gnu.tar.gz
-tar xzf rustun-0.0.1-x86_64-unknown-linux-gnu.tar.gz
-cd rustun-0.0.1-x86_64-unknown-linux-gnu
+- TUN/TAP driver support (usually pre-installed)
 
-# Make binaries executable
-chmod +x server client
+## 📦 Installation
+
+### Method 1: One-Click Script (Server Only)
+
+```bash
+# Install latest version
+curl -fsSL https://raw.githubusercontent.com/smartethnet/rustun/main/install.sh | sudo bash
 ```
 
-**Windows:**
-```powershell
-# 1. Download rustun-0.0.1-x86_64-pc-windows-msvc.zip from releases
-# 2. Extract to a directory
-# 3. Download Wintun from https://www.wintun.net/
-# 4. Extract wintun.dll to the same directory as client.exe
+**What it does:**
+- ✅ Detects your system automatically (Ubuntu/Debian/CentOS/Fedora/Arch)
+- ✅ Downloads the correct binary for your architecture
+- ✅ Installs to `/usr/local/bin/rustun-server`
+- ✅ Creates configuration directory `/etc/rustun/`
+- ✅ Sets up systemd service for auto-start
+- ✅ Configures automatic restart on failure
+
+**Post-installation:**
+
+```bash
+# Edit server configuration
+sudo vim /etc/rustun/server.toml
+
+# Edit routes configuration  
+sudo vim /etc/rustun/routes.json
+
+# Start server
+sudo systemctl start rustun-server
+
+# Enable auto-start on boot
+sudo systemctl enable rustun-server
+
+# Check status
+sudo systemctl status rustun-server
+
+# View logs
+sudo journalctl -u rustun-server -f
 ```
 
-### Quick Test
+### Method 2: Manual Installation (Client & Server)
 
-**Start Server:**
+**Step 1: Download**
+
 ```bash
-# Linux/macOS
+# Go to releases page and download for your platform
+# https://github.com/smartethnet/rustun/releases/latest
+
+# Example for Linux x86_64
+wget https://github.com/smartethnet/rustun/releases/latest/download/rustun-x86_64-unknown-linux-gnu.tar.gz
+tar xzf rustun-x86_64-unknown-linux-gnu.tar.gz
+cd rustun-*
+```
+
+**Step 2: Run**
+
+```bash
+# Start server (Linux/macOS)
 sudo ./server server.toml.example
 
-# Windows (as Administrator)
-.\server.exe server.toml.example
+# Start client (Linux/macOS)
+sudo ./client -s SERVER_IP:8080 -i client-001
 ```
 
-**Connect Client:**
-```bash
-# Linux/macOS
-sudo ./client -s SERVER_IP:8080 -i client-001
+**Windows:**
 
-# Windows (as Administrator)
+```powershell
+# 1. Download rustun-x86_64-pc-windows-msvc.zip
+# 2. Extract to a folder
+# 3. Download Wintun from https://www.wintun.net/
+# 4. Extract wintun.dll to the same folder
+# 5. Run as Administrator:
+
+.\server.exe server.toml.example
+# or
 .\client.exe -s SERVER_IP:8080 -i client-001
 ```
 
@@ -130,62 +183,219 @@ sudo ./client -s SERVER_IP:8080 -i client-001
 
 ### Server Configuration
 
-Create `server.toml`:
+Create or edit `/etc/rustun/server.toml`:
 
 ```toml
 [server_config]
+# Server listening address
 listen_addr = "0.0.0.0:8080"
 
 [crypto_config]
-# ChaCha20-Poly1305 (Recommended)
+# Encryption method (choose one):
+
+# ChaCha20-Poly1305 (Recommended - high security, great performance)
 chacha20poly1305 = "your-secret-key-here"
 
-# Or use AES-256-GCM
-# aes256 = "your-secret-key-here"
+# AES-256-GCM (Hardware accelerated on modern CPUs)
+# aes256gcm = "your-secret-key-here"
 
-# Or XOR (lightweight)
-# xor = "rustun"
+# XOR (Lightweight, for testing only)
+# xor = "test-key"
 
-# Or no encryption
-# crypto_config = plain
+# Plain (No encryption, debugging only)
+# crypto_config=plain
 
 [route_config]
-routes_file = "./etc/routes.json"
+# Path to routes configuration file
+routes_file = "/etc/rustun/routes.json"
 ```
 
-### Client Routes Configuration
+### Routes Configuration
 
-Create `routes.json`:
+Create or edit `/etc/rustun/routes.json`:
 
 ```json
 [
   {
-    "cluster": "beijing",
-    "identity": "bj-office-gw",
+    "cluster": "production",
+    "identity": "prod-gateway-01",
     "private_ip": "10.0.1.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": ["192.168.1.0/24", "192.168.2.0/24"]
+    "ciders": ["192.168.100.0/24", "192.168.101.0/24"]
   },
   {
-    "cluster": "beijing",
-    "identity": "bj-dev-server",
+    "cluster": "production",
+    "identity": "prod-app-server-01",
+    "private_ip": "10.0.1.2",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.1.254",
+    "ciders": []
+  }
+]
+```
+
+**Field Descriptions:**
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `cluster` | Logical group for multi-tenancy isolation | `"production"` |
+| `identity` | Unique client identifier | `"prod-app-01"` |
+| `private_ip` | Virtual IP assigned to the client | `"10.0.1.1"` |
+| `mask` | Subnet mask for the VPN network | `"255.255.255.0"` |
+| `gateway` | Gateway IP for routing | `"10.0.1.254"` |
+| `ciders` | CIDR ranges routable through this client | `["192.168.1.0/24"]` |
+
+## 📖 Usage
+
+### Starting the Server
+
+**Using systemd (if installed with script):**
+
+```bash
+sudo systemctl start rustun-server
+sudo systemctl status rustun-server
+sudo journalctl -u rustun-server -f
+```
+
+**Running manually:**
+
+```bash
+# Linux/macOS
+sudo ./server /etc/rustun/server.toml
+
+# Windows (as Administrator)
+.\server.exe server.toml
+```
+
+### Connecting Clients
+
+**Basic Connection:**
+
+```bash
+# Linux/macOS
+sudo ./client -s SERVER_IP:8080 -i client-identity
+
+# Windows (as Administrator)
+.\client.exe -s SERVER_IP:8080 -i client-identity
+```
+
+**Examples:**
+
+```bash
+# Production gateway
+./client -s 192.168.1.100:8080 -i prod-gateway-01
+
+# Development workstation
+./client -s vpn.example.com:8080 -i dev-workstation-01
+
+# With custom encryption
+./client -s SERVER:8080 -i client-001 -c chacha20:my-secret-key
+```
+
+### Client Options
+
+```bash
+./client --help
+```
+
+**Common Options:**
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `-s, --server` | Server address | `-s 192.168.1.100:8080` |
+| `-i, --identity` | Client identity | `-i prod-app-01` |
+| `-c, --crypto` | Encryption method | `-c chacha20:my-key` |
+| `--enable-p2p` | Enable P2P mode | `--enable-p2p` |
+| `--keepalive-interval` | Keepalive interval (seconds) | `--keepalive-interval 10` |
+
+### Encryption Options
+
+```bash
+# ChaCha20-Poly1305 (Default, Recommended)
+./client -s SERVER:8080 -i client-001 -c chacha20:my-secret-key
+
+# AES-256-GCM (Hardware accelerated)
+./client -s SERVER:8080 -i client-001 -c aes256:my-secret-key
+
+# XOR (Lightweight, testing only)
+./client -s SERVER:8080 -i client-001 -c xor:test-key
+
+# Plain (No encryption, debugging only)
+./client -s SERVER:8080 -i client-001 -c plain
+```
+
+## 🚀 P2P Direct Connection
+
+Enable P2P for direct peer-to-peer connections with automatic intelligent path selection:
+
+```bash
+./client -s SERVER:8080 -i client-001 --enable-p2p
+```
+
+### Connection Strategy
+
+Rustun uses a three-tier intelligent routing strategy:
+
+1. **🌐 IPv6 Direct Connection** (Primary Path)
+   - Lowest latency, highest throughput
+   - Works when both peers have global IPv6 addresses
+   - Automatic connection establishment
+
+2. **🔄 STUN Hole Punching** (Secondary Path)
+   - NAT traversal for IPv4 networks
+   - Works across most NAT types
+   - Automatic fallback when IPv6 unavailable
+
+3. **📡 Relay Mode** (Fallback)
+   - Via server when P2P fails
+   - Guaranteed connectivity
+   - Automatic failover
+
+## 🏢 Multi-Tenant Isolation
+
+Rustun supports cluster-based multi-tenancy for complete network isolation between different teams or business units.
+
+### How It Works
+
+- Each client belongs to a **cluster**
+- Clients can only communicate with peers in the same cluster
+- Different clusters use separate IP ranges
+- Perfect for isolating production, staging, and development environments
+
+### Configuration Example
+
+**routes.json:**
+
+```json
+[
+  {
+    "cluster": "production",
+    "identity": "prod-gateway",
+    "private_ip": "10.0.1.1",
+    "mask": "255.255.255.0",
+    "gateway": "10.0.1.254",
+    "ciders": ["192.168.100.0/24"]
+  },
+  {
+    "cluster": "production",
+    "identity": "prod-app-01",
     "private_ip": "10.0.1.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
     "ciders": []
   },
   {
-    "cluster": "shanghai",
-    "identity": "sh-office-gw",
+    "cluster": "development",
+    "identity": "dev-workstation-01",
     "private_ip": "10.0.2.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.2.254",
-    "ciders": ["192.168.10.0/24"]
+    "ciders": []
   },
   {
-    "cluster": "shanghai",
-    "identity": "sh-db-server",
+    "cluster": "development",
+    "identity": "dev-workstation-02",
     "private_ip": "10.0.2.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.2.254",
@@ -194,275 +404,120 @@ Create `routes.json`:
 ]
 ```
 
-**Configuration Explained:**
+### Result
 
-- `cluster`: Logical group for multi-tenancy isolation
-- `identity`: Unique client identifier
-- `private_ip`: Virtual IP assigned to the client
-- `mask`: Subnet mask for the VPN network
-- `gateway`: Gateway IP for routing
-- `ciders`: CIDR ranges accessible through this client
+- ✅ Production clients can only communicate within `10.0.1.0/24` network
+- ✅ Development clients are isolated in `10.0.2.0/24` network
+- ✅ No cross-cluster communication possible
+- ✅ Each team has complete network independence
 
-## 📖 Usage
+## 💼 Use Cases
 
-### Starting the Server
+Rustun is designed for various networking scenarios. Here are common use cases:
 
-```bash
-# With default configuration file
-./server etc/server.toml
+| Use Case | Description | Key Benefits | Typical Setup |
+|----------|-------------|--------------|---------------|
+| **🏢 Remote Office Connectivity** | Connect multiple office locations with site-to-site VPN | • Seamless resource sharing<br>• P2P optimization reduces latency<br>• Multi-tenant support for departments | One server + gateway client per office |
+| **👨‍💻 Secure Remote Work** | Enable secure remote access for employees working from home | • Encrypted connections from anywhere<br>• P2P reduces server load<br>• Easy user management via routes.json | One server + client per employee |
+| **🔀 Multi-Environment Isolation** | Separate networks for production, staging, and development | • Zero risk of cross-environment access<br>• Same infrastructure for all envs<br>• Easy configuration replication | One server + separate cluster per environment |
+| **🤖 IoT Device Management** | Securely connect and manage IoT devices across locations | • Encrypted device communication<br>• Direct P2P for low-latency control<br>• Scalable to thousands of devices | One server + lightweight client per gateway |
+| **🎮 Gaming Server Network** | Low-latency network for game servers across regions | • P2P ensures sub-10ms latency<br>• Secure server-to-server comms<br>• Easy regional expansion | One server + client per game server region |
+| **☁️ Hybrid Cloud Connectivity** | Connect on-premise infrastructure with cloud resources | • Secure cloud-to-datacenter bridge<br>• Automatic path optimization<br>• Support for multi-cloud scenarios | One server + client per datacenter/cloud region |
+| **🔐 Zero Trust Network** | Build a zero-trust network with peer isolation | • Per-peer authentication via identity<br>• Fine-grained access control with CIDRs<br>• Complete traffic encryption | One server + strict cluster configuration |
 
-# Server will:
-# - Listen on 0.0.0.0:8080
-# - Use ChaCha20-Poly1305 encryption
-# - Load client routes from routes.json
-```
+## 🛠️ Build from Source
 
-### Starting a Client
+### Prerequisites
 
-```bash
-# Basic usage (uses default ChaCha20 encryption)
-./client -s SERVER_IP:8080 -i CLIENT_IDENTITY
+- **Rust 1.70+**: [Install Rust](https://www.rust-lang.org/tools/install)
+- **Build Tools**: 
+  - Linux: `build-essential` or equivalent
+  - macOS: Xcode Command Line Tools
+  - Windows: MSVC Build Tools
 
-# Example: Beijing office gateway
-./client -s 192.168.1.100:8080 -i bj-office-gw
-
-# Example: Shanghai database server
-./client -s 192.168.1.100:8080 -i sh-db-server
-```
-
-### Client Command-Line Options
+### Quick Build
 
 ```bash
-./client --help
+# Clone repository
+git clone https://github.com/smartethnet/rustun.git
+cd rustun
+
+# Build release binaries
+cargo build --release
+
+# Binaries will be in target/release/
+./target/release/server --help
+./target/release/client --help
 ```
 
-```
-Rustun VPN Client
-
-Usage: client [OPTIONS] --server <SERVER> --identity <IDENTITY>
-
-Options:
-  -s, --server <SERVER>
-          Server address (e.g., 127.0.0.1:8080)
-
-  -i, --identity <IDENTITY>
-          Client identity/name
-
-  -c, --crypto <CRYPTO>
-          Encryption method: plain, aes256:<key>, chacha20:<key>, or xor:<key>
-          [default: chacha20:rustun]
-
-      --enable-p2p
-          Enable P2P direct connection via IPv6
-          (disabled by default, uses relay only)
-
-      --keepalive-interval <KEEPALIVE_INTERVAL>
-          Keep-alive interval in seconds
-          [default: 10]
-
-      --keepalive-threshold <KEEPALIVE_THRESHOLD>
-          Keep-alive threshold (reconnect after this many failures)
-          [default: 5]
-
-  -h, --help
-          Print help
-
-  -V, --version
-          Print version
-```
-
-### Encryption Options
+### Cross-Platform Build
 
 ```bash
-# ChaCha20-Poly1305 (Default, Recommended)
-./client -s SERVER:8080 -i client-001 -c chacha20:my-secret-key
+# Install cross-compilation tool
+cargo install cross
 
-# AES-256-GCM (Hardware accelerated on supported CPUs)
-./client -s SERVER:8080 -i client-001 -c aes256:my-secret-key
+# Build for Linux x86_64 (musl, static)
+cross build --release --target x86_64-unknown-linux-musl
 
-# XOR (Lightweight, for testing only)
-./client -s SERVER:8080 -i client-001 -c xor:test-key
+# Build for ARM64 Linux
+cross build --release --target aarch64-unknown-linux-gnu
 
-# Plain (No encryption, debugging only)
-./client -s SERVER:8080 -i client-001 -c plain
+# Build for Windows
+cross build --release --target x86_64-pc-windows-msvc
+
+# Build for macOS (requires macOS host)
+cargo build --release --target x86_64-apple-darwin
+cargo build --release --target aarch64-apple-darwin
 ```
 
-### P2P Direct Connection
+### Build Script
 
-Rustun supports **dual-path P2P networking** for optimal performance and connectivity:
-
-#### 🌟 Connection Modes
+Use the provided build script for multi-platform builds:
 
 ```bash
-# Enable P2P with dual-path support
-./client -s SERVER:8080 -i client-001 --enable-p2p
+# Build for all platforms
+./build.sh
+
+# Builds will be in build/ directory
+# Archives will be in dist/ directory
 ```
 
-**Three-tier connection strategy:**
+## 🤝 Contributing
 
-1. **🌐 IPv6 Direct Connection** (Primary Path)
-   - Lowest latency, highest throughput
-   - Works when both peers have global IPv6 addresses
-   - UDP port 51258 (configurable via `P2P_UDP_PORT`)
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
 
-2. **📡 STUN Hole Punching** (Secondary Path)
-   - NAT traversal for IPv4 networks
-   - Automatic public IP/port discovery
-   - Works behind most NAT types
-   - UDP port 51259 (configurable via `P2P_HOLE_PUNCH_PORT`)
+- Development setup and workflow
+- Code style and conventions
+- Testing requirements
+- Pull request process
+- Project structure
 
-3. **🔄 Relay Mode** (Fallback)
-   - Guaranteed connectivity via central server
-   - Automatic fallback when P2P fails
-   - Works in all network conditions
-
-#### ✨ Key Benefits
-
-- **🎯 Smart Routing**: Automatically selects the best available path
-  - IPv6 available & active (< 15s) → Use IPv6
-  - IPv6 expired, STUN active → Use STUN
-  - Both expired → Use Relay
-- **⚡ Zero Configuration**: Addresses exchanged automatically via server
-- **🔄 Dynamic Failover**: Seamless fallback between paths
-- **📊 Real-time Status**: Monitor connection health with status command
-
-#### 🔧 How It Works
-
-```
-Initial Setup:
-  Client A ←--Handshake--→ Server ←--Handshake--→ Client B
-                 ↓
-         Exchange addresses:
-         - IPv6: [2001:db8::1]:51258
-         - STUN: 203.0.113.45:51259
-
-Ongoing Communication:
-  1. Try IPv6:    [2001:db8::1]:51258  → [2001:db8::2]:51258
-     └─ If active (< 15s) → ✅ Use IPv6 (fastest)
-     
-  2. Try STUN:    203.0.113.45:51259   → 198.51.100.89:51259
-     └─ If active (< 15s) → ✅ Use STUN (NAT traversal)
-     
-  3. Fallback:    Client A ──→ Server ──→ Client B
-     └─ Always available → ✅ Use Relay (guaranteed)
-
-Health Monitoring:
-  - Keepalive probes every 10 seconds (both IPv6 & STUN)
-  - Connection timeout: 15 seconds
-  - Automatic path re-selection on failure
-```
-
-#### 📋 Requirements
-
-**For IPv6 Direct Connection:**
-- Both clients have global IPv6 addresses
-- UDP port 51258 accessible
-- Both clients use `--enable-p2p` flag
-
-**For STUN Hole Punching:**
-- IPv4 connectivity
-- UDP port 51259 accessible
-- Compatible NAT type (works with most routers)
-- Both clients use `--enable-p2p` flag
-
-**Note:** If neither IPv6 nor STUN works, traffic automatically falls back to relay mode.
-
-#### 💡 Usage Examples
+**Quick Start for Contributors:**
 
 ```bash
-# Basic P2P (IPv6 + STUN)
-./client -s SERVER:8080 -i client-001 --enable-p2p
+# Fork, clone and create a branch
+git clone https://github.com/YOUR_USERNAME/rustun.git
+cd rustun
+git checkout -b feature/your-feature
 
-# With custom encryption
-./client -s SERVER:8080 -i client-001 --enable-p2p -c chacha20:my-key
+# Make changes and test
+cargo test
+cargo fmt
+cargo clippy
 
-# Check connection status (press 's' in interactive mode)
-# Shows IPv6 and STUN connection health for each peer
+# Commit and push
+git commit -m "feat: your feature"
+git push origin feature/your-feature
 ```
 
-#### 📊 Connection Status Output
+For questions and discussions, visit [GitHub Discussions](https://github.com/smartethnet/rustun/discussions).
 
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║                        CONNECTION STATUS                             ║
-╚══════════════════════════════════════════════════════════════════════╝
+## 📚 Architecture
 
-📡 Relay Connection (TCP)
-   ├─ RX Frames:  1234 (Errors: 0)
-   └─ TX Frames:  5678 (Errors: 1)
-
-🔗 P2P Connections (UDP): 2 peers
-   ├─ Peer: client-002
-   │    ├─ IPv6:  ✅ Active (5s ago, [2001:db8::2]:51258)
-   │    └─ STUN:  ✅ Active (8s ago, 203.0.113.45:60001)
-   └─ Peer: client-003
-        ├─ IPv6:  ⚠️  Inactive (20s ago, [2001:db8::3]:51258)
-        └─ STUN:  ✅ Active (3s ago, 198.51.100.89:60002)
-```
-
-#### 🔍 Troubleshooting
-
-**IPv6 connection not working?**
-- Check if both clients have IPv6: `curl -6 ifconfig.me`
-- Verify firewall allows UDP 51258
-
-**STUN connection not working?**
-- Check NAT type: Some symmetric NATs may not work
-- Verify firewall allows UDP 51259
-- Check if STUN server is reachable
-
-**Both failing?**
-- Relay mode will automatically activate
-- Check server connectivity
-- Verify encryption keys match
-
-### Example: Multi-Tenant Setup
-
-#### Scenario: Two Offices (Beijing & Shanghai)
-
-**Beijing Cluster:**
-- Office Gateway: `bj-office-gw` (10.0.1.1)
-- Dev Server: `bj-dev-server` (10.0.1.2)
-
-**Shanghai Cluster:**
-- Office Gateway: `sh-office-gw` (10.0.2.1)
-- DB Server: `sh-db-server` (10.0.2.2)
-
-**Start Server:**
-```bash
-./server etc/server.toml
-```
-
-**Connect Beijing Clients:**
-```bash
-# Terminal 1: Beijing Office Gateway
-./client -s 192.168.1.100:8080 -i bj-office-gw
-
-# Terminal 2: Beijing Dev Server
-./client -s 192.168.1.100:8080 -i bj-dev-server
-```
-
-**Connect Shanghai Clients:**
-```bash
-# Terminal 3: Shanghai Office Gateway
-./client -s 192.168.1.100:8080 -i sh-office-gw
-
-# Terminal 4: Shanghai DB Server
-./client -s 192.168.1.100:8080 -i sh-db-server
-```
-
-**Test Connectivity:**
-
-```bash
-# Beijing clients can communicate
-ping 10.0.1.2  # From bj-office-gw to bj-dev-server
-
-# Shanghai clients can communicate
-ping 10.0.2.2  # From sh-office-gw to sh-db-server
-
-# Cross-cluster communication is isolated
-# Beijing cannot reach Shanghai and vice versa
-```
+For detailed protocol and architecture documentation, see:
+- [Protocol Documentation](PROTOCOL.md) / [中文版本](PROTOCOL_CN.md)
+- [Build Documentation](BUILD.md)
+- [Contributing Guide](CONTRIBUTING.md)
 
 ## 🗺️ Roadmap
 
@@ -470,15 +525,15 @@ ping 10.0.2.2  # From sh-office-gw to sh-db-server
 - [x] **STUN hole punching** - ✅ Completed (NAT traversal for IPv4)
 - [x] **Dual-path networking** - ✅ Completed (IPv6 + STUN with intelligent failover)
 - [x] **Real-time connection monitoring** - ✅ Completed (Per-path health status)
-- [ ] Windows service support
 - [ ] systemd integration for Linux
-- [ ] Web-based management dashboard
 - [ ] Dynamic route updates without restart
+- [ ] Web-based management dashboard
+- [ ] Mobile & Desktopclients(Android/iOS/Windows/MacOS)
 - [ ] QUIC protocol support
-- [ ] Mobile clients (iOS/Android)
 - [ ] Docker container images
 - [ ] Kubernetes operator
 - [ ] Auto-update mechanism
+- [ ] Windows service support
 
 ## 🙏 Acknowledgments
 

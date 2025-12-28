@@ -9,7 +9,7 @@
 //! cargo run --example stun_discover -- --port 51258
 //! ```
 
-use rustun::client::stun::{StunClient, NatType};
+use rustun::client::p2p::stun::{StunClient, NatType};
 use std::time::Duration;
 
 #[derive(clap::Parser, Debug)]

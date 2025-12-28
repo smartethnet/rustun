@@ -6,7 +6,7 @@ use crate::client::{Args, DEFAULT_MTU, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::client::relay::{RelayHandler, new_relay_handler};
 use crate::client::p2p::peer::{PeerHandler};
 use crate::client::prettylog::{log_startup_banner};
-use crate::client::stun::StunClient;
+use crate::client::p2p::stun::StunClient;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block};
 use crate::utils;
@@ -189,7 +189,7 @@ async fn run_event_loop(
                     }
                 }
                 _ = exporter_ticker.tick() => {
-                    get_status(client_handler, Some(peer_handler)).await;
+                    get_status(client_handler, Some(peer_handler), dev).await;
                 }
             }
         } else {
@@ -215,18 +215,23 @@ async fn run_event_loop(
                     }
                 }
                 _ = exporter_ticker.tick() => {
-                    get_status(client_handler, None).await;
+                    get_status(client_handler, None, dev).await;
                 }
             }
         }
     }
 }
 
-async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>) {
+async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &DeviceHandler) {
     println!("\n╔══════════════════════════════════════════════════════════════════════╗");
     println!("║                        CONNECTION STATUS                             ║");
     println!("╚══════════════════════════════════════════════════════════════════════╝");
-    
+
+    // traffic status
+    // device receive is the traffic outbound
+    println!("Receive Bytes: {}MB", dev.tx_bytes/1024/1024);
+    println!("Send Bytes: {}MB", dev.rx_bytes/1024/1024);
+
     // Relay Status
     let relay_status = relay.get_status();
     println!("\n📡 Relay Connection (TCP)");

@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 pub mod peer;
+pub mod stun;
 mod udp_server;
 
 
