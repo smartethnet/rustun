@@ -1,8 +1,9 @@
 use clap::Parser;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tokio::time::interval;
-use crate::client::{Args, DEFAULT_MTU, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
+use crate::client::{Args, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::client::relay::{RelayHandler, new_relay_handler};
 use crate::client::p2p::peer::{PeerHandler};
 use crate::client::prettylog::{log_startup_banner};
@@ -10,8 +11,7 @@ use crate::client::p2p::stun::StunClient;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block};
 use crate::utils;
-use crate::utils::device::{DeviceConfig, DeviceHandler};
-use crate::utils::sys_route::SysRoute;
+use crate::utils::device::{DeviceHandler};
 
 pub async fn run_client() {
     let args = Args::parse();
@@ -44,7 +44,7 @@ pub async fn run_client() {
     };
 
     // create relay handler
-    let (mut relay_handler, device_config) = match new_relay_handler(&args, crypto_block.clone(),
+    let (mut relay_handler, device_config, config_update_signal) = match new_relay_handler(&args, crypto_block.clone(),
                                                                      ipv6, P2P_UDP_PORT,
                                                                      stun_ip,
                                                                      stun_port).await {
@@ -82,18 +82,13 @@ pub async fn run_client() {
     };
 
     // Run main event loop
-    run_event_loop(&mut relay_handler, &mut peer_handler, &mut dev).await;
+    run_event_loop(&mut relay_handler, &mut peer_handler, &mut dev, config_update_signal).await;
 }
 
 async fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandler> {
     tracing::info!("Initializing device with config: {:?}", device_config);
     let mut dev = DeviceHandler::new();
-    let tun_index = dev.run(DeviceConfig {
-        ip: device_config.private_ip.clone(),
-        mask: device_config.mask.clone(),
-        gateway: device_config.gateway.clone(),
-        mtu: DEFAULT_MTU,
-    }).await?;
+    let tun_index = dev.run(device_config).await?;
 
     // Log TUN index (Windows only)
     if let Some(idx) = tun_index {
@@ -101,13 +96,14 @@ async fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<Devic
     }
 
     // Add system routes for peers
-    let sys_route = SysRoute::new();
-    for route_item in &device_config.others {
-        tracing::info!("Add sys route item: {:?} via {}", route_item.ciders, device_config.private_ip);
-        if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone(), tun_index) {
-            tracing::error!("Failed to add route for {:?}: {}", route_item, e);
-        }
-    }
+    // let sys_route = SysRoute::new();
+    // for route_item in &device_config.others {
+    //     tracing::info!("Add sys route item: {:?} via {}", route_item.ciders, device_config.private_ip);
+    //     if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone(), tun_index) {
+    //         tracing::error!("Failed to add route for {:?}: {}", route_item, e);
+    //     }
+    // }
+    dev.reload_route(device_config.others.clone()).await;
     
     Ok(dev)
 }
@@ -116,6 +112,7 @@ async fn run_event_loop(
     client_handler: &mut RelayHandler,
     peer_handler: &mut Option<PeerHandler>,
     dev: &mut DeviceHandler,
+    mut config_update_signal: mpsc::Receiver<HandshakeReplyFrame>,
 ) {
     let mut exporter_ticker = interval(Duration::from_secs(30));
     loop {
@@ -123,6 +120,9 @@ async fn run_event_loop(
         if let Some(peer_handler) = peer_handler {
             // P2P enabled: try P2P first, fallback to relay
             tokio::select! {
+                config = config_update_signal.recv() => {
+                    dev.reload_route(config.unwrap().others.clone()).await;
+                }
                 // TUN device -> P2P or Server
                 packet = dev.recv() => {
                     if let Some(packet) = packet {
@@ -195,6 +195,9 @@ async fn run_event_loop(
         } else {
             // P2P disabled: relay only
             tokio::select! {
+                config = config_update_signal.recv() => {
+                    dev.reload_route(config.unwrap().others.clone()).await;
+                }
                 // TUN device -> Server (relay only)
                 packet = dev.recv() => {
                     if let Some(packet) = packet {

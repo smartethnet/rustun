@@ -295,7 +295,8 @@ impl RelayHandler {
 
 pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>,
                                ipv6: String, port: u16,
-                               stun_ip: String, stun_port: u16)->crate::Result<(RelayHandler, HandshakeReplyFrame)> {
+                               stun_ip: String, stun_port: u16)
+                                ->crate::Result<(RelayHandler, HandshakeReplyFrame, mpsc::Receiver<HandshakeReplyFrame>)> {
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
         keepalive_interval: Duration::from_secs(args.keepalive_interval),
@@ -319,5 +320,5 @@ pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>,
 
     log_handshake_success(&device_config);
 
-    Ok((handler, device_config))
+    Ok((handler, device_config, config_ready_rx))
 }

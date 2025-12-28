@@ -2,6 +2,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 #[allow(unused_imports)]
 use tun::AbstractDevice;
+use crate::codec::frame::{HandshakeReplyFrame, RouteItem};
+use crate::utils::sys_route::SysRoute;
+use std::collections::HashSet;
+
+const DEFAULT_MTU: u16 = 1430;
 
 #[derive(Clone)]
 pub struct DeviceConfig {
@@ -12,20 +17,25 @@ pub struct DeviceConfig {
 }
 
 pub struct Device {
-    #[allow(dead_code)]
-    config: DeviceConfig,
+    ip: String,
+    mask: String,
+    mtu: u16,
     inbound_tx: mpsc::Sender<Vec<u8>>,
     outbound_rx: mpsc::Receiver<Vec<u8>>,
 }
 
 impl Device {
     pub fn new(
-        config: DeviceConfig,
+        ip: String,
+        mask: String,
+        mtu: u16,
         inbound_tx: mpsc::Sender<Vec<u8>>,
         outbound_rx: mpsc::Receiver<Vec<u8>>,
     ) -> Self {
         Self {
-            config,
+            ip,
+            mask,
+            mtu,
             inbound_tx,
             outbound_rx,
         }
@@ -34,10 +44,10 @@ impl Device {
     pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>) -> crate::Result<()> {
         let mut config = tun::Configuration::default();
         config
-            .address(self.config.ip.clone())
-            .netmask(self.config.mask.clone())
+            .address(self.ip.clone())
+            .netmask(self.mask.clone())
             // .destination(self.config.gateway.clone())
-            .mtu(self.config.mtu)
+            .mtu(self.mtu)
             .up();
 
         #[cfg(target_os = "linux")]
@@ -90,6 +100,9 @@ impl Device {
 }
 
 pub struct DeviceHandler {
+    others: Vec<RouteItem>,
+    private_ip: String,
+    tun_index: Option<i32>,
     inbound_rx: Option<mpsc::Receiver<Vec<u8>>>,
     outbound_tx: Option<mpsc::Sender<Vec<u8>>>,
     pub rx_bytes: usize,
@@ -99,6 +112,9 @@ pub struct DeviceHandler {
 impl DeviceHandler {
     pub fn new() -> Self {
         Self {
+            others: vec![],
+            private_ip: String::new(),
+            tun_index: None,
             inbound_rx: None,
             outbound_tx: None,
             rx_bytes: 0,
@@ -106,13 +122,17 @@ impl DeviceHandler {
         }
     }
 
-    pub async fn run(&mut self, cfg: DeviceConfig) -> crate::Result<Option<i32>> {
+    pub async fn run(&mut self, cfg: &HandshakeReplyFrame) -> crate::Result<Option<i32>> {
         let (inbound_tx, inbound_rx) = mpsc::channel(1000);
         let (outbound_tx, outbound_rx) = mpsc::channel(1000);
         self.inbound_rx = Some(inbound_rx);
         self.outbound_tx = Some(outbound_tx);
+        self.private_ip = cfg.private_ip.clone();
 
-        let mut dev = Device::new(cfg, inbound_tx, outbound_rx);
+        let mut dev = Device::new(cfg.private_ip.clone(),
+                                  cfg.mask.clone(),
+                                  DEFAULT_MTU,
+                                  inbound_tx, outbound_rx);
         let (ready_tx, ready_rx) = oneshot::channel();
         tokio::spawn(async move {
             let res = dev.run(ready_tx).await;
@@ -123,6 +143,7 @@ impl DeviceHandler {
         });
 
         let tun_index = ready_rx.await.unwrap_or(None);
+        self.tun_index = tun_index;
         Ok(tun_index)
     }
 
@@ -156,6 +177,53 @@ impl DeviceHandler {
             Ok(_) => Ok(()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    pub async fn reload_route(&mut self, new_routes: Vec<RouteItem>) {
+        let sys_route = SysRoute::new();
+        
+        let mut old_cidrs: HashSet<String> = HashSet::new();
+        for route in &self.others {
+            for cidr in &route.ciders {
+                old_cidrs.insert(cidr.clone());
+            }
+        }
+        
+        let mut new_cidrs: HashSet<String> = HashSet::new();
+        for route in &new_routes {
+            for cidr in &route.ciders {
+                new_cidrs.insert(cidr.clone());
+            }
+        }
+        
+        tracing::info!("Reloading routes: old={}, new={}", old_cidrs.len(), new_cidrs.len());
+        
+        // Find routes to delete (in old but not in new)
+        let to_delete: Vec<String> = old_cidrs.difference(&new_cidrs).cloned().collect();
+        
+        // Find routes to add (in new but not in old)
+        let to_add: Vec<String> = new_cidrs.difference(&old_cidrs).cloned().collect();
+        
+        // Delete old routes
+        for cidr in to_delete {
+            tracing::info!("Deleting route: {}", cidr);
+            if let Err(e) = sys_route.del(vec![cidr.clone()], self.private_ip.clone(), self.tun_index) {
+                tracing::error!("Failed to delete route {}: {}", cidr, e);
+            }
+        }
+        
+        // Add new routes
+        for cidr in to_add {
+            tracing::info!("Adding route: {} via {}", cidr, self.private_ip);
+            if let Err(e) = sys_route.add(vec![cidr.clone()], self.private_ip.clone(), self.tun_index) {
+                tracing::error!("Failed to add route {}: {}", cidr, e);
+            }
+        }
+        
+        // Update stored routes
+        self.others = new_routes;
+        
+        tracing::info!("Route reload complete");
     }
 }
 
