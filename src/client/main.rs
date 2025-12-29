@@ -95,14 +95,6 @@ async fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<Devic
         tracing::info!("TUN interface index: {}", idx);
     }
 
-    // Add system routes for peers
-    // let sys_route = SysRoute::new();
-    // for route_item in &device_config.others {
-    //     tracing::info!("Add sys route item: {:?} via {}", route_item.ciders, device_config.private_ip);
-    //     if let Err(e) = sys_route.add(route_item.ciders.clone(), device_config.private_ip.clone(), tun_index) {
-    //         tracing::error!("Failed to add route for {:?}: {}", route_item, e);
-    //     }
-    // }
     dev.reload_route(device_config.others.clone()).await;
     
     Ok(dev)

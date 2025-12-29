@@ -13,8 +13,13 @@ use std::fmt::Display;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio::time::timeout;
+
+/// Default timeout for TCP connection establishment
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Network connection abstraction for reading/writing frames
 ///
@@ -208,12 +213,19 @@ pub async fn create_connection(config: ConnectionConfig,
 ) -> crate::Result<Box<dyn Connection>> {
     match config {
         ConnectionConfig::TCP(config) => {
-            match TcpStream::connect(&config.server_addr).await {
-                Ok(stream) => {
+            // Connect with timeout
+            let connect_result = timeout(
+                DEFAULT_CONNECT_TIMEOUT,
+                TcpStream::connect(&config.server_addr)
+            ).await;
+
+            match connect_result {
+                Ok(Ok(stream)) => {
                     let conn = TcpConnection::new(stream, block.clone());
                     Ok(Box::new(conn))
                 }
-                Err(e) => Err(e.into()),
+                Ok(Err(e)) => Err(e.into()),
+                Err(_) => Err("connection timeout".into()),
             }
         }
     }

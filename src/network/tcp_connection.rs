@@ -11,11 +11,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::time::timeout;
 
 /// Default timeout for read operations
-const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(20);
 /// Default timeout for write operations
-const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
+const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// TCP connection wrapper with frame parsing and encryption
 ///
@@ -24,10 +25,8 @@ pub struct TcpConnection {
     /// Underlying TCP socket
     socket: TcpStream,
     /// Write operation timeout
-    #[allow(dead_code)]
     write_timeout: Duration,
     /// Read operation timeout
-    #[allow(dead_code)]
     read_timeout: Duration,
     /// Input buffer for incomplete frames
     input_stream: BytesMut,
@@ -67,6 +66,32 @@ impl TcpConnection {
         }
     }
 
+    /// Set read timeout duration
+    ///
+    /// # Arguments
+    /// - `timeout` - Duration for read operations
+    pub fn set_read_timeout(&mut self, timeout: Duration) {
+        self.read_timeout = timeout;
+    }
+
+    /// Set write timeout duration
+    ///
+    /// # Arguments
+    /// - `timeout` - Duration for write operations
+    pub fn set_write_timeout(&mut self, timeout: Duration) {
+        self.write_timeout = timeout;
+    }
+
+    /// Get current read timeout
+    pub fn read_timeout(&self) -> Duration {
+        self.read_timeout
+    }
+
+    /// Get current write timeout
+    pub fn write_timeout(&self) -> Duration {
+        self.write_timeout
+    }
+
     /// Parse a complete frame from the input buffer
     ///
     /// Attempts to parse a frame from buffered data. If successful,
@@ -97,7 +122,7 @@ impl Connection for TcpConnection {
     ///
     /// # Returns
     /// - `Ok(Frame)` - Successfully received frame
-    /// - `Err` - Connection error, EOF, or parse error
+    /// - `Err` - Connection error, EOF, parse error, or timeout
     async fn read_frame(&mut self) -> crate::Result<Frame> {
         loop {
             if let Ok(frame) = self.parse_frame() {
@@ -106,13 +131,29 @@ impl Connection for TcpConnection {
                 }
             }
 
-            // TODO: set read timeout
-            if 0 == self.socket.read_buf(&mut self.input_stream).await? {
-                return if self.input_stream.is_empty() {
-                    Err("EOF".into())
-                } else {
-                    Err("connection reset by peer".into())
-                };
+            // Read with timeout
+            let read_result = timeout(
+                self.read_timeout,
+                self.socket.read_buf(&mut self.input_stream)
+            ).await;
+
+            match read_result {
+                Ok(Ok(0)) => {
+                    return if self.input_stream.is_empty() {
+                        Err("EOF".into())
+                    } else {
+                        Err("connection reset by peer".into())
+                    };
+                }
+                Ok(Ok(_n)) => {
+                    // Successfully read n bytes, continue loop to parse
+                }
+                Ok(Err(e)) => {
+                    return Err(e.into());
+                }
+                Err(_) => {
+                    return Err("read timeout".into());
+                }
             }
         }
     }
@@ -126,7 +167,7 @@ impl Connection for TcpConnection {
     ///
     /// # Returns
     /// - `Ok(())` - Frame sent successfully
-    /// - `Err` - Marshal error or write error
+    /// - `Err` - Marshal error, write error, or timeout
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()> {
         let result = Parser::marshal(frame, self.block.as_ref());
         let buf = match result {
@@ -136,14 +177,21 @@ impl Connection for TcpConnection {
             }
         };
 
-        // TODO: set write timeout
-        if let Err(e) = self.socket.write_all(buf.as_slice()).await {
-            return Err(e.into());
+        // Write with timeout
+        let write_result = timeout(
+            self.write_timeout,
+            async {
+                self.socket.write_all(buf.as_slice()).await?;
+                self.socket.flush().await?;
+                Ok::<(), std::io::Error>(())
+            }
+        ).await;
+
+        match write_result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(e.into()),
+            Err(_) => Err("write timeout".into()),
         }
-        if let Err(e) = self.socket.flush().await {
-            return Err(e.into());
-        }
-        Ok(())
     }
 
     /// Close the connection gracefully

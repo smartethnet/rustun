@@ -247,8 +247,8 @@ cleanup() {
 main() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║         Rustun VPN Server Installation Script           ║"
-    echo "║              Version: ${VERSION}                              ║"
+    echo "║         Rustun VPN Server Installation Script            ║"
+    echo "║              Version: ${VERSION}                         ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
     

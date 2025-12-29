@@ -12,7 +12,7 @@ tokio = { version = "1.48.0", features = ["full"] }
 tracing = "*"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 time = "0.3.44"
-tun= { version = "0.8.4", features = ["futures-core", "async"] }
+tun= { version = "0.8.5", features = ["futures-core", "async"] }
 async-trait = "0.1.89"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand = "0.9.2"
@@ -26,6 +26,8 @@ ureq = "2.10"
 stunclient = "0.4"
 socket2 = "0.6.1"
 notify = "7.0"
+tokio-util = "0.7.17"
+ctrlc2 = "3.7.3"
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -41,3 +43,7 @@ path = "src/cmd/client.rs"
 [[example]]
 name = "stun_discover"
 path = "examples/stun_discover.rs"
+
+[[example]]
+name = "tun_reader"
+path = "examples/read_async.rs"
