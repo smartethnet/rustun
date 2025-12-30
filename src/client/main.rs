@@ -6,7 +6,7 @@ use tokio::time::interval;
 use crate::client::{Args, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::client::relay::{RelayHandler, new_relay_handler};
 use crate::client::p2p::peer::{PeerHandler};
-use crate::client::prettylog::{log_startup_banner};
+use crate::client::prettylog::{get_status, log_startup_banner};
 use crate::client::p2p::stun::StunClient;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block};
@@ -44,10 +44,13 @@ pub async fn run_client() {
     };
 
     // create relay handler
-    let (mut relay_handler, device_config, config_update_signal) = match new_relay_handler(&args, crypto_block.clone(),
-                                                                     ipv6, P2P_UDP_PORT,
-                                                                     stun_ip,
-                                                                     stun_port).await {
+    let (mut relay_handler,
+        device_config,
+        config_update_signal) = match new_relay_handler(&args,
+                                                        crypto_block.clone(),
+                                                        ipv6, P2P_UDP_PORT,
+                                                        stun_ip,
+                                                        stun_port).await {
         Ok(result) => result,
         Err(e) => {
             tracing::error!("Failed to setup client: {}", e);
@@ -215,75 +218,4 @@ async fn run_event_loop(
             }
         }
     }
-}
-
-async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &DeviceHandler) {
-    println!("\n╔══════════════════════════════════════════════════════════════════════╗");
-    println!("║                        CONNECTION STATUS                             ║");
-    println!("╚══════════════════════════════════════════════════════════════════════╝");
-
-    // traffic status
-    // device receive is the traffic outbound
-    println!("Receive Bytes: {}MB", dev.tx_bytes/1024/1024);
-    println!("Send Bytes: {}MB", dev.rx_bytes/1024/1024);
-
-    // Relay Status
-    let relay_status = relay.get_status();
-    println!("\n📡 Relay Connection (TCP)");
-    println!("   ├─ RX Frames:  {} (Errors: {})", relay_status.rx_frame, relay_status.rx_error);
-    println!("   └─ TX Frames:  {} (Errors: {})", relay_status.tx_frame, relay_status.tx_error);
-    
-    // P2P Status
-    if let Some(peer_handler) = peer {
-        let peer_status = peer_handler.get_status().await;
-        
-        if peer_status.is_empty() {
-            println!("\n🔗 P2P Connections (UDP)");
-            println!("   └─ No peers configured");
-        } else {
-            println!("\n🔗 P2P Connections (UDP): {} peers", peer_status.len());
-            
-            for (idx, status) in peer_status.iter().enumerate() {
-                let is_last = idx == peer_status.len() - 1;
-                let prefix = if is_last { "└─" } else { "├─" };
-                let continuation = if is_last { " " } else { "│" };
-                
-                println!("   {} Peer: {}", prefix, status.identity);
-                
-                // IPv6 Direct Connection
-                let ipv6_state = match (&status.ipv6_addr, &status.ipv6_last_active) {
-                    (None, _) => "❌ No Address".to_string(),
-                    (Some(addr), None) => format!("⏳ Connecting... ({})", addr),
-                    (Some(addr), Some(last)) => {
-                        let elapsed = last.elapsed().as_secs();
-                        if elapsed < 15 {
-                            format!("✅ Active ({}s ago, {})", elapsed, addr)
-                        } else {
-                            format!("⚠️  Inactive ({}s ago, {})", elapsed, addr)
-                        }
-                    }
-                };
-                println!("   {}    ├─ IPv6:  {}", continuation, ipv6_state);
-                
-                // STUN Hole-Punched Connection
-                let stun_state = match (&status.stun_addr, &status.stun_last_active) {
-                    (None, _) => "❌ No Address".to_string(),
-                    (Some(addr), None) => format!("⏳ Connecting... ({})", addr),
-                    (Some(addr), Some(last)) => {
-                        let elapsed = last.elapsed().as_secs();
-                        if elapsed < 15 {
-                            format!("✅ Active ({}s ago, {})", elapsed, addr)
-                        } else {
-                            format!("⚠️  Inactive ({}s ago, {})", elapsed, addr)
-                        }
-                    }
-                };
-                println!("   {}    └─ STUN:  {}", continuation, stun_state);
-            }
-        }
-    } else {
-        println!("\n🔗 P2P Mode: Disabled");
-    }
-    
-    println!();
 }

@@ -1,10 +1,10 @@
 use crate::client::Args;
 use crate::client::prettylog::log_handshake_success;
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerInfo, RouteItem};
 use crate::crypto::Block;
 use crate::network::{create_connection, Connection, ConnectionConfig, TCPConnectionConfig};
 use crate::utils;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, interval};
@@ -30,6 +30,8 @@ pub struct RelayClient {
     outbound_rx: mpsc::Receiver<Frame>,
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
+    /// Shared peer list (full info from HandshakeReply, updated by KeepAlive)
+    others: Arc<RwLock<Vec<RouteItem>>>,
 }
 
 impl RelayClient {
@@ -38,12 +40,24 @@ impl RelayClient {
         outbound_rx: mpsc::Receiver<Frame>,
         inbound_tx: mpsc::Sender<Frame>,
         block: Arc<Box<dyn Block>>,
+        others: Arc<RwLock<Vec<RouteItem>>>,
     ) -> Self {
         Self {
             cfg,
             outbound_rx,
             inbound_tx,
             block,
+            others,
+        }
+    }
+
+    /// Update peer last_active from KeepAlive reply
+    fn update_peer_status(&self, peer_infos: Vec<PeerInfo>) {
+        let mut others = self.others.write().unwrap();
+        for peer_info in peer_infos {
+            if let Some(route) = others.iter_mut().find(|r| r.identity == peer_info.identity) {
+                route.last_active = peer_info.last_active;
+            }
         }
     }
 
@@ -68,6 +82,7 @@ impl RelayClient {
                         port,
                         stun_ip: stun_ip.clone(),
                         stun_port,
+                        others: vec![], // Client doesn't need to send peer info
                     });
                     match conn.write_frame(keepalive_frame).await {
                         Ok(_) => {
@@ -102,8 +117,15 @@ impl RelayClient {
                             tracing::debug!("received frame {}", frame);
                             let beg = Instant::now();
                             match frame {
-                                Frame::KeepAlive(_) => {
+                                Frame::KeepAlive(keepalive) => {
                                     keepalive_wait = keepalive_wait.saturating_sub(1);
+                                    
+                                    // Update peer last_active from server's keepalive reply
+                                    if !keepalive.others.is_empty() {
+                                        self.update_peer_status(keepalive.others);
+                                        let count = self.others.read().unwrap().len();
+                                        tracing::debug!("Updated {} peer statuses", count);
+                                    }
                                 }
                                 Frame::Data(data) => {
                                     if let Err(e) =  self.inbound_tx.send(Frame::Data(data)).await {
@@ -199,6 +221,8 @@ pub struct RelayHandler {
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
     metrics: RelayStatus,
+    /// Shared peer list with RelayClient (updated by handshake and keepalive)
+    others: Arc<RwLock<Vec<RouteItem>>>,
 }
 
 impl RelayHandler {
@@ -210,7 +234,13 @@ impl RelayHandler {
             inbound_tx,
             block,
             metrics: Default::default(),
+            others: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+    
+    /// Get current peer list
+    pub fn get_others(&self) -> Vec<RouteItem> {
+        self.others.read().unwrap().clone()
     }
 
     pub fn run_client(&mut self, cfg: RelayClientConfig,
@@ -221,6 +251,7 @@ impl RelayHandler {
             outbound_rx,
             self.inbound_tx.clone(),
             self.block.clone(),
+            self.others.clone(),  // Share the Arc<RwLock<>>
         );
         self.outbound_tx = Some(outbound_tx);
 
@@ -243,6 +274,14 @@ impl RelayHandler {
                         continue;
                     }
                 };
+                
+                // Store initial peer list from handshake reply
+                {
+                    let mut others = client.others.write().unwrap();
+                    *others = frame.others.clone();
+                    tracing::info!("Initialized peer list: {} peers", others.len());
+                }
+                
                 if let Err(e) = on_ready.send(frame.clone()).await {
                     tracing::error!("on ready send fail: {}", e);
                 }

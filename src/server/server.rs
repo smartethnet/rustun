@@ -1,5 +1,5 @@
 use crate::codec::frame::Frame::HandshakeReply;
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, PeerUpdateFrame, RouteItem};
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerInfo, PeerUpdateFrame, RouteItem};
 use crate::crypto::Block;
 use crate::network::connection_manager::ConnectionManager;
 use crate::network::{Connection, ListenerConfig, create_listener, TCPListenerConfig};
@@ -7,9 +7,19 @@ use crate::network::{ConnectionMeta};
 use crate::server::client_manager::ClientManager;
 use crate::server::config::ServerConfig;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
+
+/// Get current Unix timestamp in seconds
+#[inline]
+fn now_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
 
 pub struct Server {
     server_config: ServerConfig,
@@ -150,6 +160,7 @@ impl Handler {
             port: 0,
             stun_ip: "".to_string(),
             stun_port: 0,
+            last_active: now_timestamp(),
         };
         tracing::debug!("handshake completed with {:?}", meta);
 
@@ -219,13 +230,13 @@ impl Handler {
         others
             .iter()
             .map(|client| {
-                let (ipv6, port, stun_ip, stun_port) = match self.connection_manager
+                let (ipv6, port, stun_ip, stun_port, last_active) = match self.connection_manager
                     .get_connection_by_identity(cluster, &client.identity) {
                     Some(c) => {
-                        (c.ipv6, c.port, c.stun_ip, c.stun_port)
+                        (c.ipv6, c.port, c.stun_ip, c.stun_port, c.last_active)
                     },
                     None => {
-                        ("".to_string(), 0, "".to_string(), 0)
+                        ("".to_string(), 0, "".to_string(), 0, 0)
                     }
                 };
 
@@ -237,6 +248,30 @@ impl Handler {
                     port,
                     stun_ip,
                     stun_port,
+                    last_active,
+                }
+            })
+            .collect()
+    }
+
+    fn build_peer_infos(&self, cluster: &str, my_id: &String) -> Vec<PeerInfo> {
+        let all_peers = self
+            .client_manager
+            .get_cluster_clients_exclude(my_id);
+        
+        all_peers
+            .iter()
+            .map(|client| {
+                // Check if this peer is currently online
+                let last_active = match self.connection_manager
+                    .get_connection_by_identity(cluster, &client.identity) {
+                    Some(conn) => conn.last_active,  // Online: use actual timestamp
+                    None => 0,  // Offline: use 0
+                };
+
+                PeerInfo {
+                    identity: client.identity.clone(),
+                    last_active,
                 }
             })
             .collect()
@@ -284,8 +319,23 @@ impl Handler {
                     }
                 }
                 
-                // Reply keepalive
-                if let Err(e) = self.outbound_tx.send(Frame::KeepAlive(frame)).await {
+                // Reply keepalive with peer info
+                let others = if let Some(cluster) = &self.cluster {
+                    self.build_peer_infos(cluster, &frame.identity)
+                } else {
+                    vec![]
+                };
+
+                let reply_frame = Frame::KeepAlive(KeepAliveFrame {
+                    identity: frame.identity,
+                    ipv6: frame.ipv6,
+                    port: frame.port,
+                    stun_ip: frame.stun_ip,
+                    stun_port: frame.stun_port,
+                    others,
+                });
+
+                if let Err(e) = self.outbound_tx.send(reply_frame).await {
                     tracing::error!("reply keepalive frame failed with {:?}", e);
                 }
             }

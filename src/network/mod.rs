@@ -124,6 +124,7 @@ pub struct ConnectionMeta {
     // hole punch address
     pub stun_ip: String,
     pub stun_port: u16,
+    pub last_active: u64,
 }
 
 impl PartialEq<ConnectionMeta> for &ConnectionMeta {

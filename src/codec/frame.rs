@@ -191,6 +191,19 @@ pub struct RouteItem {
 
     pub stun_ip: String,
     pub stun_port: u16,
+    pub last_active: u64,
+}
+
+/// Simplified peer information for keep-alive messages
+///
+/// Contains only essential fields to minimize network overhead in keepalive frames
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerInfo {
+    /// Unique identifier of the peer
+    pub identity: String,
+    
+    /// Last active timestamp (Unix timestamp in seconds)
+    pub last_active: u64,
 }
 
 /// Keep-alive frame for connection health monitoring
@@ -221,6 +234,9 @@ pub struct KeepAliveFrame {
     pub stun_ip: String,
 
     pub stun_port: u16,
+
+    /// Other peers in the cluster (simplified info for keepalive)
+    pub others: Vec<PeerInfo>,
 }
 
 /// Peer update notification frame sent by server

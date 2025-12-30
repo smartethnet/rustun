@@ -1,6 +1,16 @@
 use crate::network::ConnectionMeta;
 use std::collections::HashMap;
 use std::sync::RwLock;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Get current Unix timestamp in seconds
+#[inline]
+fn now_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
 
 pub struct ConnectionManager {
     /// Cluster-based connections map (tenant isolation)
@@ -105,6 +115,9 @@ impl ConnectionManager {
 
         if let Some(connections) = cluster_map.get_mut(cluster)
             && let Some(conn) = connections.iter_mut().find(|c| c.identity == *identity) {
+            // Always update last_active timestamp on keepalive
+            conn.last_active = now_timestamp();
+
             let mut changed = false;
             if conn.ipv6 != ipv6 || conn.port != port {
                 conn.ipv6 = ipv6.clone();
