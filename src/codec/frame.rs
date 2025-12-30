@@ -35,8 +35,6 @@ pub(crate) enum FrameType {
     Data = 3,
     /// Server handshake response (Type 4)
     HandshakeReply = 4,
-    /// Peer update notification (Type 5)
-    PeerUpdate = 5,
     /// Probing ipv6
     ProbeIPv6 = 6,
     /// Probing hole punch
@@ -60,7 +58,6 @@ impl TryFrom<u8> for FrameType {
             0x02 => Ok(FrameType::KeepAlive),
             0x03 => Ok(FrameType::Data),
             0x04 => Ok(FrameType::HandshakeReply),
-            0x05 => Ok(FrameType::PeerUpdate),
             0x06 => Ok(FrameType::ProbeIPv6),
             0x07 => Ok(FrameType::ProbeHolePunch),
             _ => Err(FrameError::Invalid),
@@ -86,8 +83,6 @@ pub enum Frame {
     HandshakeReply(HandshakeReplyFrame),
     /// Connection keep-alive heartbeat
     KeepAlive(KeepAliveFrame),
-    /// Peer information update notification
-    PeerUpdate(PeerUpdateFrame),
     /// Tunneled IP packet data
     Data(DataFrame),
     ProbeIPv6(ProbeIPv6Frame),
@@ -103,11 +98,10 @@ impl Display for Frame {
         match self {
             Frame::Handshake(frame) => write!(f, "handshake with {}", frame.identity),
             Frame::HandshakeReply(frame) => {
-                write!(f, "handshake reply with {} others", frame.others.len())
+                write!(f, "handshake reply with {} peer_details", frame.peer_details.len())
             }
             Frame::KeepAlive(frame) => write!(f, "keepalive, ipv6 {}:{} stun: {}:{}",
                                               frame.ipv6, frame.port, frame.stun_ip, frame.stun_port),
-            Frame::PeerUpdate(frame) => write!(f, "peer update for {}", frame.identity),
             Frame::Data(frame) => write!(f, "data with payload size {}", frame.payload.len()),
             Frame::ProbeIPv6(frame)=> write!(f, "{} probe ipv6", frame.identity),
             Frame::ProbeHolePunch(frame)=>write!(f, "{} probe hole punch", frame.identity),
@@ -161,9 +155,9 @@ pub struct HandshakeReplyFrame {
 
     /// List of other peers in the same cluster
     ///
-    /// Each RouteItem contains routing information for a peer node,
+    /// Each PeerDetail contains routing information for a peer node,
     /// allowing this client to establish routes to other VPN members
-    pub others: Vec<RouteItem>,
+    pub peer_details: Vec<PeerDetail>,
 }
 
 /// Routing information for a peer node
@@ -171,7 +165,7 @@ pub struct HandshakeReplyFrame {
 /// Describes a single peer in the VPN cluster, including its identity,
 /// virtual IP address, and the CIDR ranges it can route to.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RouteItem {
+pub struct PeerDetail {
     /// Unique identifier of the peer
     pub identity: String,
 
@@ -191,18 +185,6 @@ pub struct RouteItem {
 
     pub stun_ip: String,
     pub stun_port: u16,
-    pub last_active: u64,
-}
-
-/// Simplified peer information for keep-alive messages
-///
-/// Contains only essential fields to minimize network overhead in keepalive frames
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerInfo {
-    /// Unique identifier of the peer
-    pub identity: String,
-    
-    /// Last active timestamp (Unix timestamp in seconds)
     pub last_active: u64,
 }
 
@@ -235,32 +217,7 @@ pub struct KeepAliveFrame {
 
     pub stun_port: u16,
 
-    /// Other peers in the cluster (simplified info for keepalive)
-    pub others: Vec<PeerInfo>,
-}
-
-/// Peer update notification frame sent by server
-///
-/// Notifies clients when a peer's IPv6 address or port changes.
-/// This allows P2P connections to adapt to dynamic network changes.
-///
-/// ## Usage
-/// - Server sends when detecting peer address changes (from keepalive)
-/// - Client updates its peer routing table accordingly
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerUpdateFrame {
-    /// Peer identity (which peer changed)
-    pub identity: String,
-    
-    /// Updated IPv6 address
-    pub ipv6: String,
-    
-    /// Updated UDP port
-    pub port: u16,
-
-    pub stun_ip: String,
-
-    pub stun_port: u16,
+    pub peer_details: Vec<PeerDetail>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

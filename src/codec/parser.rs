@@ -64,11 +64,6 @@ impl Parser {
                 Ok((Frame::KeepAlive(keepalive), total_len))
             }
 
-            FrameType::PeerUpdate => {
-                let peer_update: PeerUpdateFrame = Self::decrypt_and_deserialize(payload, block)?;
-                Ok((Frame::PeerUpdate(peer_update), total_len))
-            }
-
             FrameType::Data => {
                 block
                     .decrypt(payload)
@@ -210,17 +205,6 @@ impl Parser {
                     "failed to marshal keepalive",
                 )?;
                 let mut buf = Self::build_header(FrameType::KeepAlive, payload.len() as u16);
-                buf.extend_from_slice(&payload);
-                Ok(buf)
-            }
-
-            Frame::PeerUpdate(peer_update) => {
-                let payload = Self::serialize_and_encrypt(
-                    &peer_update,
-                    block,
-                    "failed to marshal peer update",
-                )?;
-                let mut buf = Self::build_header(FrameType::PeerUpdate, payload.len() as u16);
                 buf.extend_from_slice(&payload);
                 Ok(buf)
             }

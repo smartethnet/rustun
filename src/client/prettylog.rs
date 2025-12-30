@@ -22,9 +22,9 @@ pub fn log_handshake_success(config: &HandshakeReplyFrame) {
     println!("Virtual IP address: {}", config.private_ip);
     println!("Network mask: {}", config.mask);
     println!("Gateway: {}", config.gateway);
-    println!("Peer nodes: {}", config.others.len());
-    if !config.others.is_empty() {
-        for (idx, peer) in config.others.iter().enumerate() {
+    println!("Peer nodes: {}", config.peer_details.len());
+    if !config.peer_details.is_empty() {
+        for (idx, peer) in config.peer_details.iter().enumerate() {
             println!("  [{}] Identity: {}", idx + 1, peer.identity);
             println!("      Private IP: {}", peer.private_ip);
             println!("      IPv6: {}", peer.ipv6);
@@ -104,8 +104,8 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &
         println!("\n🔗 P2P Mode: Disabled");
     }
     
-    // Cluster Peers Status (from relay server)
-    let others = relay.get_others();
+    // Cluster Peers Status (from device handler)
+    let others = dev.get_peer_details();
     if !others.is_empty() {
         println!("\n👥 Cluster Peers: {} total", others.len());
         

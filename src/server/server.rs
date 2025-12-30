@@ -1,5 +1,5 @@
 use crate::codec::frame::Frame::HandshakeReply;
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerInfo, PeerUpdateFrame, RouteItem};
+use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerDetail};
 use crate::crypto::Block;
 use crate::network::connection_manager::ConnectionManager;
 use crate::network::{Connection, ListenerConfig, create_listener, TCPListenerConfig};
@@ -144,7 +144,7 @@ impl Handler {
                 private_ip: client_config.private_ip.clone(),
                 mask: client_config.mask.clone(),
                 gateway: client_config.gateway.clone(),
-                others: route_items,
+                peer_details: route_items,
             }))
             .await?;
 
@@ -222,7 +222,7 @@ impl Handler {
     /// - find ipv6 from online connection
     /// - filter private and ciders from client configuration
     ///
-    fn build_others(&self, cluster: &str, my_id: &String) -> Vec<RouteItem> {
+    fn build_others(&self, cluster: &str, my_id: &String) -> Vec<PeerDetail> {
         // reply handshake with other clients info
         let others = self
             .client_manager
@@ -240,7 +240,7 @@ impl Handler {
                     }
                 };
 
-                RouteItem {
+                PeerDetail {
                     identity: client.identity.clone(),
                     private_ip: client.private_ip.clone(),
                     ciders: client.ciders.clone(),
@@ -248,29 +248,6 @@ impl Handler {
                     port,
                     stun_ip,
                     stun_port,
-                    last_active,
-                }
-            })
-            .collect()
-    }
-
-    fn build_peer_infos(&self, cluster: &str, my_id: &String) -> Vec<PeerInfo> {
-        let all_peers = self
-            .client_manager
-            .get_cluster_clients_exclude(my_id);
-        
-        all_peers
-            .iter()
-            .map(|client| {
-                // Check if this peer is currently online
-                let last_active = match self.connection_manager
-                    .get_connection_by_identity(cluster, &client.identity) {
-                    Some(conn) => conn.last_active,  // Online: use actual timestamp
-                    None => 0,  // Offline: use 0
-                };
-
-                PeerInfo {
-                    identity: client.identity.clone(),
                     last_active,
                 }
             })
@@ -286,42 +263,19 @@ impl Handler {
                 // Update connection metadata with latest IPv6 and port from keepalive
                 // If the address changed, notify other clients in the cluster
                 if let Some(cluster) = &self.cluster {
-                    if let Some(other_connections) = self.connection_manager.update_connection_info(
+                    let _ = self.connection_manager.update_connection_info(
                         cluster,
                         &frame.identity,
                         frame.ipv6.clone(),
                         frame.port,
                         frame.stun_ip.clone(),
                         frame.stun_port,
-                    ) {
-                        // Address changed, notify all other clients in the cluster
-                        tracing::info!(
-                            "Notifying {} peers about {}'s address change to {}:{}",
-                            other_connections.len(),
-                            frame.identity,
-                            frame.ipv6,
-                            frame.port
-                        );
-                        
-                        let peer_update = Frame::PeerUpdate(PeerUpdateFrame {
-                            identity: frame.identity.clone(),
-                            ipv6: frame.ipv6.clone(),
-                            port: frame.port,
-                            stun_ip: frame.stun_ip.clone(),
-                            stun_port: frame.stun_port,
-                        });
-                        
-                        for conn in other_connections {
-                            if let Err(e) = conn.outbound_tx.send(peer_update.clone()).await {
-                                tracing::warn!("Failed to send peer update to {}: {:?}", conn.identity, e);
-                            }
-                        }
-                    }
+                    );
                 }
-                
-                // Reply keepalive with peer info
-                let others = if let Some(cluster) = &self.cluster {
-                    self.build_peer_infos(cluster, &frame.identity)
+
+                // Reply keepalive with full peer details for route sync
+                let peer_details = if let Some(cluster) = &self.cluster {
+                    self.build_others(cluster, &frame.identity)
                 } else {
                     vec![]
                 };
@@ -332,7 +286,7 @@ impl Handler {
                     port: frame.port,
                     stun_ip: frame.stun_ip,
                     stun_port: frame.stun_port,
-                    others,
+                    peer_details,
                 });
 
                 if let Err(e) = self.outbound_tx.send(reply_frame).await {

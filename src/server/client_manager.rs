@@ -50,29 +50,20 @@ impl ClientManager {
         }
     }
 
-    #[allow(unused)]
-    pub fn del_client(&self, identity: &String) {
-        let removed = self
-            .clients
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(identity);
+    pub fn rewrite_clients_config(&self, clients: Vec<ClientConfig>) {
+        let mut clients_map = self.clients.write().unwrap_or_else(|e| e.into_inner());
+        let mut cluster_map = self.cluster_clients.write().unwrap_or_else(|e| e.into_inner());
 
-        // Also remove from cluster map
-        if let Some(client) = removed {
-            let mut cluster_map = self
-                .cluster_clients
-                .write()
-                .unwrap_or_else(|e| e.into_inner());
-
-            if let Some(clients) = cluster_map.get_mut(&client.cluster) {
-                clients.retain(|c| c.identity != *identity);
-                // Remove cluster if empty
-                if clients.is_empty() {
-                    cluster_map.remove(&client.cluster);
-                }
-            }
+        let mut new_clients_map = HashMap::new();
+        let mut new_cluster_map: HashMap<String, Vec<ClientConfig>> = HashMap::new();
+        for client in clients {
+            tracing::debug!("add client config {:?}", client);
+            new_clients_map.insert(client.identity.clone(), client.clone());
+            new_cluster_map.entry(client.cluster.clone()).or_default().push(client.clone());
         }
+
+        *clients_map = new_clients_map;
+        *cluster_map = new_cluster_map;
     }
 
     pub fn get_cluster_clients_exclude(&self, identity: &String) -> Vec<ClientConfig> {
@@ -100,15 +91,6 @@ impl ClientManager {
             .unwrap_or_default()
     }
 
-    #[allow(unused)]
-    pub fn get_cluster_clients(&self, cluster: &str) -> Vec<ClientConfig> {
-        self.cluster_clients
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(cluster)
-            .cloned()
-            .unwrap_or_default()
-    }
 
     pub fn get_client(&self, identity: &String) -> Option<ClientConfig> {
         self.clients

@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, RwLock};
 use crate::client::{P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::client::p2p::{PeerMeta, PeerStatus, CONNECTION_TIMEOUT, KEEPALIVE_INTERVAL, OUTBOUND_BUFFER_SIZE};
 use crate::client::p2p::udp_server::UDPServer;
-use crate::codec::frame::{Frame, ProbeHolePunchFrame, ProbeIPv6Frame, RouteItem};
+use crate::codec::frame::{Frame, ProbeHolePunchFrame, ProbeIPv6Frame, PeerDetail};
 use crate::codec::parser::Parser;
 use crate::crypto::Block;
 
@@ -61,7 +61,8 @@ impl PeerHandler {
         }
     }
 
-    pub fn run_peer(&mut self)  {
+    /// run peer service listen udp socket for p2p
+    pub fn run_peer_service(&mut self)  {
         let (output_tx, output_rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
         let (inbound_tx, inbound_rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
         let mut udp_server = UDPServer::new(self.port, self.stun_port,
@@ -75,57 +76,64 @@ impl PeerHandler {
 
         self.outbound_tx = Some(output_tx);
         self.inbound_rx = Some(inbound_rx);
+        tracing::info!("Running p2p peer service");
     }
 
-    pub async fn add_peers(&mut self, routes: Vec<RouteItem>) {
-        let mut peers = self.peers.write().await;
+    /// rewrite peers with new peers details for route
+    ///
+    /// this function will update peer's ipv6 and stun address
+    ///
+    pub async fn rewrite_peers(&mut self, peer_details: Vec<PeerDetail>) {
+        {
+            let mut peers = self.peers.write().await;
+            *peers = HashMap::new();
+        }
 
-        for route in routes {
-            // Parse and probe IPv6 address
-            let ipv6_remote = self.parse_and_probe_address(
-                &route.identity,
-                &route.ipv6,
-                route.port,
-                true, // is_ipv6
-            );
-
-            // Parse and probe STUN address
-            let stun_remote = self.parse_and_probe_address(
-                &route.identity,
-                &route.stun_ip,
-                route.stun_port,
-                false, // is_ipv4
-            );
-
-            // Add or update peer in the map
-            peers.insert(
-                route.identity.clone(),
-                PeerMeta {
-                    identity: route.identity.clone(),
-                    private_ip: route.private_ip.clone(),
-                    ciders: route.ciders.clone(),
-                    ipv6: route.ipv6.clone(),
-                    port: route.port,
-                    remote_addr: ipv6_remote,
-                    stun_addr: stun_remote,
-                    last_active: None,
-                    stun_last_active: None,
-                },
-            );
+        for p in peer_details {
+            self.add_peer(p).await;
         }
     }
 
-    /// Parse address and send probe packet
-    ///
-    /// # Arguments
-    /// * `identity` - Peer identity for logging
-    /// * `ip` - IP address string (IPv4 or IPv6)
-    /// * `port` - Port number
-    /// * `is_ipv6` - true for IPv6, false for IPv4
-    ///
-    /// # Returns
-    /// Parsed SocketAddr if valid, None otherwise
-    fn parse_and_probe_address(
+    async fn add_peer(&self, p: PeerDetail) {
+        let mut peers = self.peers.write().await;
+        let ipv6_remote = self.parse_address(
+            &p.identity,
+            &p.ipv6,
+            p.port,
+            true, // is_ipv6
+        );
+        if ipv6_remote.is_some() {
+            tracing::info!("Added IPv6 peer: {} at {}:{}", p.identity, p.ipv6, p.port);
+        }
+
+        let stun_remote = self.parse_address(
+            &p.identity,
+            &p.stun_ip,
+            p.stun_port,
+            false, // is_ipv4
+        );
+        if stun_remote.is_some() {
+            tracing::info!("Added Hole Punch peer: {} at {}:{}", p.identity, p.ipv6, p.port);
+        }
+
+        // Add or update peer in the map
+        peers.insert(
+            p.identity.clone(),
+            PeerMeta {
+                identity: p.identity.clone(),
+                private_ip: p.private_ip.clone(),
+                ciders: p.ciders.clone(),
+                ipv6: p.ipv6.clone(),
+                port: p.port,
+                remote_addr: ipv6_remote,
+                stun_addr: stun_remote,
+                last_active: None,
+                stun_last_active: None,
+            },
+        );
+    }
+
+    fn parse_address(
         &self,
         identity: &str,
         ip: &str,
@@ -150,41 +158,40 @@ impl PeerHandler {
                 return None;
             }
         };
-
-        if is_ipv6 {
-            tracing::info!("Added IPv6 peer: {} at [{}]:{}", identity, ip, port);
-            let _ = self.send_ipv6_probe(addr);
-        } else {
-            tracing::info!("Added STUN peer: {} at {}:{}", identity, ip, port);
-            let _ = self.send_hole_punch_probe(addr);
-        }
-
         Some(addr)
     }
 
-    pub async fn update_peer(&mut self, identity: String,
-                             ipv6: String, port: u16,
-                             stun_ip: String, stun_port: u16) {
+    /// insert or update peers
+    ///
+    /// if peer exist, and the ipv6/stun_ip changed,
+    /// update peer and set last_active/stun_last_active to None,
+    /// this will disable p2p temporary, if the new address reply probe, p2p will enable
+    ///
+    /// if peer not exist, add it.
+    ///
+    pub async fn insert_or_update(&mut self, peer_details: Vec<PeerDetail>) {
         let mut peers = self.peers.write().await;
+        for peer in peer_details {
+            match peers.get_mut(&peer.identity) {
+                Some(existing_peer) => {
+                    if !peer.ipv6.is_empty() {
+                        // update ipv6 if changed
+                        self.update_address(existing_peer, &peer.ipv6, peer.port, true);
+                    }
 
-        if let Some(peer) = peers.get_mut(&identity) {
-            if !ipv6.is_empty() {
-                self.update_address(peer, &ipv6, port, true);
+                    if !peer.stun_ip.is_empty() {
+                        // update stun_ip if changed
+                        self.update_address(existing_peer, &peer.stun_ip, peer.stun_port, false);
+                    }
+                }
+                None => {
+                    self.add_peer(peer).await;
+                }
             }
 
-            if !stun_ip.is_empty() {
-                self.update_address(peer, &stun_ip, stun_port, false);
-            }
         }
     }
 
-    /// Update peer address (IPv6 or STUN) and send probe if changed
-    ///
-    /// # Arguments
-    /// * `peer` - Peer metadata to update
-    /// * `ip` - New IP address
-    /// * `port` - New port
-    /// * `is_ipv6` - true for IPv6, false for IPv4/STUN
     fn update_address(&self, peer: &mut PeerMeta, ip: &str, port: u16, is_ipv6: bool) {
         // Format and parse address
         let addr_str = if is_ipv6 {
@@ -202,14 +209,12 @@ impl PeerHandler {
             }
         };
 
-        // Get old address and check if update is needed
         let (old_addr, protocol) = if is_ipv6 {
             (peer.remote_addr, "IPv6")
         } else {
             (peer.stun_addr, "STUN")
         };
 
-        // Update if address changed or is newly available
         if old_addr != Some(new_addr) {
             tracing::info!(
                 "Update {} address for peer {}: {} -> {}",
@@ -219,147 +224,23 @@ impl PeerHandler {
                 new_addr
             );
 
-            // Update peer fields based on protocol
             if is_ipv6 {
                 peer.remote_addr = Some(new_addr);
                 peer.last_active = None;
-                let _ = self.send_ipv6_probe(new_addr);
             } else {
                 peer.stun_addr = Some(new_addr);
                 peer.stun_last_active = None;
-                let _ = self.send_hole_punch_probe(new_addr);
             }
         }
     }
 
-    pub async fn start_probe_timer(&self) {
-        let outbound_tx = match &self.outbound_tx {
-            Some(tx) => tx.clone(),
-            None => {
-                tracing::error!("Cannot start probe timer: outbound_tx not initialized");
-                return;
-            }
-        };
-
-        let block = self.block.clone();
-        let peers = self.peers.clone(); // Clone Arc, not the data
-        let identity = self.identity.clone();
-
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(KEEPALIVE_INTERVAL);
-            loop {
-                interval.tick().await;
-
-                // Send IPv6 probes
-                Self::send_probes(
-                    &peers,
-                    &outbound_tx,
-                    &block,
-                    &identity,
-                    true, // is_ipv6
-                ).await;
-
-                // Send STUN hole punch probes
-                Self::send_probes(
-                    &peers,
-                    &outbound_tx,
-                    &block,
-                    &identity,
-                    false, // is_ipv4/stun
-                ).await;
-            }
-        });
-    }
-
-    /// Send probe packets to all peers with available addresses
+    /// recv_frame to recv from local p2p socket to get peers frame
     ///
-    /// # Arguments
-    /// * `peers` - Shared peer map
-    /// * `outbound_tx` - Channel to send packets
-    /// * `block` - Encryption block
-    /// * `identity` - Our identity for probe frames
-    /// * `is_ipv6` - true for IPv6 probes, false for STUN probes
-    async fn send_probes(
-        peers: &Arc<RwLock<HashMap<String, PeerMeta>>>,
-        outbound_tx: &mpsc::Sender<(Vec<u8>, SocketAddr)>,
-        block: &Arc<Box<dyn Block>>,
-        identity: &str,
-        is_ipv6: bool,
-    ) {
-        // Collect addresses based on protocol
-        let peer_addrs: Vec<SocketAddr> = {
-            let peers_guard = peers.read().await;
-            peers_guard
-                .values()
-                .filter_map(|p| {
-                    if is_ipv6 {
-                        p.remote_addr
-                    } else {
-                        p.stun_addr
-                    }
-                })
-                .collect()
-        };
-
-        // Skip if no peers have this type of address
-        if peer_addrs.is_empty() {
-            return;
-        }
-
-        // Create appropriate probe frame
-        let probe_frame = if is_ipv6 {
-            Frame::ProbeIPv6(ProbeIPv6Frame {
-                identity: identity.to_string(),
-            })
-        } else {
-            Frame::ProbeHolePunch(ProbeHolePunchFrame {
-                identity: identity.to_string(),
-            })
-        };
-
-        // Marshal once, reuse for all peers
-        let probe_data = match Parser::marshal(probe_frame, block.as_ref()) {
-            Ok(data) => data,
-            Err(e) => {
-                let protocol = if is_ipv6 { "IPv6" } else { "STUN" };
-                tracing::error!("Failed to marshal {} probe: {}", protocol, e);
-                return;
-            }
-        };
-
-        // Send to all peers
-        let protocol = if is_ipv6 { "IPv6" } else { "hole punch" };
-        for remote_addr in peer_addrs {
-            if let Err(e) = outbound_tx.send((probe_data.clone(), remote_addr)).await {
-                tracing::warn!("Failed to send {} probe to {}: {}", protocol, remote_addr, e);
-            } else {
-                tracing::info!("Sent {} probe to {}", protocol, remote_addr);
-            }
-        }
-    }
-
-    fn send_ipv6_probe(&self, remote_addr: SocketAddr) -> crate::Result<()> {
-        let outbound_tx = self.outbound_tx.as_ref().ok_or("outbound_tx not initialized")?;
-        let probe_ipv6 = Frame::ProbeIPv6(ProbeIPv6Frame {
-            identity: self.identity.clone(),
-        });
-        let data = Parser::marshal(probe_ipv6, self.block.as_ref())?;
-
-        // Non-blocking send - best effort
-        let _ = outbound_tx.try_send((data, remote_addr));
-        Ok(())
-    }
-
-    fn send_hole_punch_probe(&self, remote_addr: SocketAddr) -> crate::Result<()> {
-        let outbound_tx = self.outbound_tx.as_ref().ok_or("outbound_tx not initialized")?;
-        let probe_hole_punch = Frame::ProbeHolePunch(ProbeHolePunchFrame {
-            identity: self.identity.clone(),
-        });
-        let data = Parser::marshal(probe_hole_punch, self.block.as_ref())?;
-        let _ = outbound_tx.try_send((data, remote_addr));
-        Ok(())
-    }
-
+    /// only support for ProbeIPv6, ProbeStun, Data
+    ///
+    /// **ProbeIPv6**
+    /// - update last_active, this is for p2p send_frame healthy checker
+    /// - remote address, most of the time this is not changed.
     pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
         let inbound_rx = self.inbound_rx.as_mut().ok_or("inbound_rx not initialized")?;
         
@@ -397,13 +278,17 @@ impl PeerHandler {
         }
     }
 
+    /// send_frame tries to get peers that contains dest_ip in ciders or private_ip
+    ///
+    /// firstly try ipv6 direct, if peers is healthy(base on last_active)
+    ///
+    /// secondary try p2p hole punch, if peers is healthy(base on stun_last_active)
+    ///
     pub async fn send_frame(&self, frame: Frame, dest_ip: &str) -> crate::Result<()> {
-        // Find peer responsible for this destination
         let peers = self.peers.read().await;
         let peer = self.find_peer_by_ip_locked(&peers, dest_ip)
             .ok_or("No peer found for destination")?;
 
-        // Check if we have any address at all
         if peer.remote_addr.is_none() && peer.stun_addr.is_none() {
             return Err(format!("Peer {} has no available address (IPv6 or STUN)", peer.identity).into());
         }
@@ -413,16 +298,13 @@ impl PeerHandler {
         let stun_addr = peer.stun_addr;
         let ipv6_last_active = peer.last_active;
         let stun_last_active = peer.stun_last_active;
-        
-        // Release lock before async operations
+
         drop(peers);
 
         // Marshal frame once for potential multiple attempts
         let data = Parser::marshal(frame, self.block.as_ref())?;
         let outbound_tx = self.outbound_tx.as_ref().ok_or("outbound_tx not initialized")?;
 
-        // Strategy: Try IPv6 first, fallback to STUN
-        
         // Attempt 1: Try IPv6 direct connection
         match self.try_send_via(
             outbound_tx,
@@ -456,38 +338,26 @@ impl PeerHandler {
             &peer_identity,
             "STUN"
         ).await {
-            SendResult::Success => return Ok(()),
+            SendResult::Success => Ok(()),
             SendResult::Expired(elapsed) => {
-                return Err(format!(
+                Err(format!(
                     "Peer {} STUN connection also expired ({:?} ago)",
                     peer_identity, elapsed
-                ).into());
+                ).into())
             }
             SendResult::NeverResponded => {
-                return Err(format!("Peer {} STUN address never responded", peer_identity).into());
+                Err(format!("Peer {} STUN address never responded", peer_identity).into())
             }
             SendResult::NoAddress => {
                 // Both attempts failed
-                return Err(format!(
+                Err(format!(
                     "Failed to send to peer {}: IPv6 unavailable/expired, STUN unavailable/expired",
                     peer_identity
-                ).into());
+                ).into())
             }
         }
     }
 
-    /// Try to send data via a specific address (IPv6 or STUN)
-    ///
-    /// # Arguments
-    /// * `outbound_tx` - Channel to send packet
-    /// * `data` - Marshaled frame data
-    /// * `addr` - Target address (None if not available)
-    /// * `last_active` - Last activity timestamp
-    /// * `peer_identity` - Peer identity for logging
-    /// * `protocol` - Protocol name for logging ("IPv6" or "STUN")
-    ///
-    /// # Returns
-    /// SendResult indicating success or reason for failure
     async fn try_send_via(
         &self,
         outbound_tx: &mpsc::Sender<(Vec<u8>, SocketAddr)>,
@@ -558,13 +428,6 @@ impl PeerHandler {
         None
     }
 
-    /// Update peer's last_active timestamp based on the source address
-    ///
-    /// This method checks if the remote_addr matches either the peer's IPv6 address
-    /// or STUN address, and updates the corresponding last_active field.
-    ///
-    /// # Arguments
-    /// * `remote_addr` - The source address of the received packet
     async fn update_peer_active(&mut self, remote_addr: SocketAddr) {
         let mut peers = self.peers.write().await;
         
@@ -606,4 +469,104 @@ impl PeerHandler {
         }
         result
     }
+}
+
+impl PeerHandler {
+    pub async fn start_probe_timer(&self) {
+        let outbound_tx = match &self.outbound_tx {
+            Some(tx) => tx.clone(),
+            None => {
+                tracing::error!("Cannot start probe timer: outbound_tx not initialized");
+                return;
+            }
+        };
+
+        let block = self.block.clone();
+        let peers = self.peers.clone(); // Clone Arc, not the data
+        let identity = self.identity.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(KEEPALIVE_INTERVAL);
+            loop {
+                interval.tick().await;
+
+                // Send IPv6 probes
+                Self::send_probes(
+                    &peers,
+                    &outbound_tx,
+                    &block,
+                    &identity,
+                    true, // is_ipv6
+                ).await;
+
+                // Send STUN hole punch probes
+                Self::send_probes(
+                    &peers,
+                    &outbound_tx,
+                    &block,
+                    &identity,
+                    false, // is_ipv4/stun
+                ).await;
+            }
+        });
+    }
+
+    async fn send_probes(
+        peers: &Arc<RwLock<HashMap<String, PeerMeta>>>,
+        outbound_tx: &mpsc::Sender<(Vec<u8>, SocketAddr)>,
+        block: &Arc<Box<dyn Block>>,
+        identity: &str,
+        is_ipv6: bool,
+    ) {
+        let peer_addrs: Vec<SocketAddr> = {
+            let peers_guard = peers.read().await;
+            peers_guard
+                .values()
+                .filter_map(|p| {
+                    if is_ipv6 {
+                        p.remote_addr
+                    } else {
+                        p.stun_addr
+                    }
+                })
+                .collect()
+        };
+
+        // Skip if no peers have this type of address
+        if peer_addrs.is_empty() {
+            return;
+        }
+
+        // Create appropriate probe frame
+        let probe_frame = if is_ipv6 {
+            Frame::ProbeIPv6(ProbeIPv6Frame {
+                identity: identity.to_string(),
+            })
+        } else {
+            Frame::ProbeHolePunch(ProbeHolePunchFrame {
+                identity: identity.to_string(),
+            })
+        };
+
+        // Marshal once, reuse for all peers
+        let probe_data = match Parser::marshal(probe_frame, block.as_ref()) {
+            Ok(data) => data,
+            Err(e) => {
+                let protocol = if is_ipv6 { "IPv6" } else { "STUN" };
+                tracing::error!("Failed to marshal {} probe: {}", protocol, e);
+                return;
+            }
+        };
+
+        // Send to all peers
+        let protocol = if is_ipv6 { "IPv6" } else { "hole punch" };
+        for remote_addr in peer_addrs {
+            if let Err(e) = outbound_tx.send((probe_data.clone(), remote_addr)).await {
+                tracing::warn!("Failed to send {} probe to {}: {}", protocol, remote_addr, e);
+            } else {
+                tracing::info!("Sent {} probe to {}", protocol, remote_addr);
+            }
+        }
+    }
+
 }

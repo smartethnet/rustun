@@ -2,7 +2,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 #[allow(unused_imports)]
 use tun::AbstractDevice;
-use crate::codec::frame::{HandshakeReplyFrame, RouteItem};
+use crate::codec::frame::{HandshakeReplyFrame, PeerDetail};
 use crate::utils::sys_route::SysRoute;
 use std::collections::HashSet;
 
@@ -100,7 +100,7 @@ impl Device {
 }
 
 pub struct DeviceHandler {
-    others: Vec<RouteItem>,
+    peer_details: Vec<PeerDetail>,
     private_ip: String,
     tun_index: Option<i32>,
     inbound_rx: Option<mpsc::Receiver<Vec<u8>>>,
@@ -112,7 +112,7 @@ pub struct DeviceHandler {
 impl DeviceHandler {
     pub fn new() -> Self {
         Self {
-            others: vec![],
+            peer_details: vec![],
             private_ip: String::new(),
             tun_index: None,
             inbound_rx: None,
@@ -179,30 +179,35 @@ impl DeviceHandler {
         }
     }
 
-    pub async fn reload_route(&mut self, new_routes: Vec<RouteItem>) {
+    /// Get current peer details list
+    pub fn get_peer_details(&self) -> Vec<PeerDetail> {
+        self.peer_details.clone()
+    }
+
+    pub async fn reload_route(&mut self, new_routes: Vec<PeerDetail>) {
         let sys_route = SysRoute::new();
         
-        let mut old_cidrs: HashSet<String> = HashSet::new();
-        for route in &self.others {
+        let mut old_ciders: HashSet<String> = HashSet::new();
+        for route in &self.peer_details {
             for cidr in &route.ciders {
-                old_cidrs.insert(cidr.clone());
+                old_ciders.insert(cidr.clone());
             }
         }
         
-        let mut new_cidrs: HashSet<String> = HashSet::new();
+        let mut new_ciders: HashSet<String> = HashSet::new();
         for route in &new_routes {
             for cidr in &route.ciders {
-                new_cidrs.insert(cidr.clone());
+                new_ciders.insert(cidr.clone());
             }
         }
         
-        tracing::info!("Reloading routes: old={}, new={}", old_cidrs.len(), new_cidrs.len());
+        tracing::info!("Reloading routes: old={}, new={}", old_ciders.len(), new_ciders.len());
         
         // Find routes to delete (in old but not in new)
-        let to_delete: Vec<String> = old_cidrs.difference(&new_cidrs).cloned().collect();
+        let to_delete: Vec<String> = old_ciders.difference(&new_ciders).cloned().collect();
         
         // Find routes to add (in new but not in old)
-        let to_add: Vec<String> = new_cidrs.difference(&old_cidrs).cloned().collect();
+        let to_add: Vec<String> = new_ciders.difference(&old_ciders).cloned().collect();
         
         // Delete old routes
         for cidr in to_delete {
@@ -221,7 +226,7 @@ impl DeviceHandler {
         }
         
         // Update stored routes
-        self.others = new_routes;
+        self.peer_details = new_routes;
         
         tracing::info!("Route reload complete");
     }
