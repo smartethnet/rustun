@@ -525,10 +525,10 @@ For detailed protocol and architecture documentation, see:
 - [x] **STUN hole punching** - ✅ Completed (NAT traversal for IPv4)
 - [x] **Dual-path networking** - ✅ Completed (IPv6 + STUN with intelligent failover)
 - [x] **Real-time connection monitoring** - ✅ Completed (Per-path health status)
+- [x] **Dynamic route updates** - ✅ Completed (Real-time sync via KeepAlive, no restart needed)
 - [ ] systemd integration for Linux
-- [ ] Dynamic route updates without restart
 - [ ] Web-based management dashboard
-- [ ] Mobile & Desktopclients(Android/iOS/Windows/MacOS)
+- [ ] Mobile & Desktop clients (Android/iOS/Windows/MacOS)
 - [ ] QUIC protocol support
 - [ ] Docker container images
 - [ ] Kubernetes operator

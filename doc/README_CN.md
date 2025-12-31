@@ -554,8 +554,8 @@ git push origin feature/your-feature
 - [x] **STUN 打洞** - ✅ 已完成（IPv4 NAT 穿透）
 - [x] **双路径网络** - ✅ 已完成（IPv6 + STUN 智能故障转移）
 - [x] **实时连接监控** - ✅ 已完成（每条路径健康状态）
+- [x] **动态路由更新** - ✅ 已完成（通过 KeepAlive 实时同步，无需重启）
 - [ ] Linux systemd 集成
-- [ ] 无需重启的动态路由更新
 - [ ] 基于 Web 的管理仪表板
 - [ ] 移动端和桌面客户端（Android/iOS/Windows/MacOS）
 - [ ] QUIC 协议支持
