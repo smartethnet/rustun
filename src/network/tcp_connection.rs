@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::time::timeout;
+use tokio::time::{timeout, Instant};
 
 /// Default timeout for read operations
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(20);
@@ -124,16 +124,23 @@ impl Connection for TcpConnection {
     /// - `Ok(Frame)` - Successfully received frame
     /// - `Err` - Connection error, EOF, parse error, or timeout
     async fn read_frame(&mut self) -> crate::Result<Frame> {
+        let deadline = Instant::now() + self.read_timeout;
+
         loop {
+            if Instant::now() > deadline {
+                return Err("read timeout".into());
+            }
+
             if let Ok(frame) = self.parse_frame() {
                 if let Some(frame) = frame {
                     return Ok(frame);
                 }
             }
 
-            // Read with timeout
+            let remaining = deadline.saturating_duration_since(Instant::now());
+
             let read_result = timeout(
-                self.read_timeout,
+                remaining,
                 self.socket.read_buf(&mut self.input_stream)
             ).await;
 
@@ -145,15 +152,11 @@ impl Connection for TcpConnection {
                         Err("connection reset by peer".into())
                     };
                 }
-                Ok(Ok(_n)) => {
-                    // Successfully read n bytes, continue loop to parse
-                }
-                Ok(Err(e)) => {
-                    return Err(e.into());
-                }
-                Err(_) => {
-                    return Err("read timeout".into());
-                }
+                Ok(Ok(n)) => {
+                    tracing::debug!("read {} bytes", n)
+                },
+                Ok(Err(e)) => return Err(e.into()),
+                Err(_) => return Err("read timeout".into()),
             }
         }
     }
