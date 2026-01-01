@@ -26,7 +26,7 @@ An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path se
 
 **Status: Actively Developing** 🚧
 
-![Architecture](./doc/arch.png)
+![Architecture](./doc/ai.png)
 
 ## ✨ Key Features
 
