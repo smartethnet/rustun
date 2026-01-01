@@ -34,7 +34,7 @@ pub struct Args {
     pub keepalive_interval: u64,
 
     /// Keep-alive threshold (reconnect after this many failures)
-    #[arg(long, default_value = "5")]
+    #[arg(long, default_value = "3")]
     pub keepalive_threshold: u8,
 
     /// Enable P2P direct connection (disabled by default, uses relay only)

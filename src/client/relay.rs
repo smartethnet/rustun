@@ -59,9 +59,18 @@ impl RelayClient {
         let port = self.cfg.port;
         let stun_ip = self.cfg.stun_ip.clone();
         let stun_port = self.cfg.stun_port;
+
+        let mut last_active = Instant::now();
+        let timeout_secs = (self.cfg.keep_alive_thresh - 1) as u64 * self.cfg.keepalive_interval.as_secs();
         loop {
             tokio::select! {
                 _ = keepalive_ticker.tick() => {
+                    if last_active.elapsed().as_secs() > timeout_secs {
+                        tracing::warn!("keepalive threshold {:?} exceeded", last_active.elapsed());
+                        break;
+                    }
+
+                    tracing::debug!("sending keepalive frame");
                     let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
                         identity: self.cfg.identity.clone(),
                         ipv6: current_ipv6.clone(),
@@ -87,6 +96,7 @@ impl RelayClient {
                 
                 // Periodic IPv6 address update check
                 _ = ipv6_update_ticker.tick() => {
+                    tracing::debug!("ipv6 update tick");
                     if let Some(new_ipv6) = utils::get_ipv6() {
                         tracing::info!("IPv6 address updated: {} -> {}", current_ipv6, new_ipv6);
                         current_ipv6 = new_ipv6.clone();
@@ -98,6 +108,7 @@ impl RelayClient {
                 
                 // inbound
                 result = conn.read_frame() => {
+                    last_active = Instant::now();
                     match result {
                         Ok(frame) => {
                             tracing::debug!("received frame {}", frame);
