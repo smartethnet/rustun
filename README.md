@@ -16,7 +16,7 @@
 [🌐 Website](https://smartethnet.github.io) · [📖 Documentation](https://smartethnet.github.io) · [中文文档](./doc/README_CN.md) · [🐛 Report Bug](https://github.com/smartethnet/rustun/issues) · [✨ Request Feature](https://github.com/smartethnet/rustun/issues)
 
 **Platform Clients:**
-[📱 iOS](https://github.com/smartethnet/rustun-ios) · [🤖 Android](https://github.com/smartethnet/rustun-android) · [🪟 Windows](https://github.com/smartethnet/rustun) · [🍎 macOS](https://github.com/smartethnet/rustun) · [🐧 Linux](https://github.com/smartethnet/rustun)
+[📱 iOS](https://github.com/smartethnet/rustun-apple) · [🤖 Android](https://github.com/smartethnet/rustun-android) · [🪟 Windows](https://github.com/smartethnet/rustun-desktop) · [🍎 macOS](https://github.com/smartethnet/rustun-apple) · [🐧 Linux](https://github.com/smartethnet/rustun)
 
 </div>
 
