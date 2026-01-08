@@ -24,7 +24,14 @@
 
 An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path selection and smart routing capabilities.
 
-**Status: Actively Developing** 🚧
+**Status: Beta** 🚧
+
+**Welcome to Rustun!** 🎉 Download our native apps for the best experience:
+
+![](screenshot.png)
+
+- 📱 [iOS App](https://testflight.apple.com/join/2zf3dwxH) - Available on TestFlight
+- 🍎 [macOS App](https://testflight.apple.com/join/2zf3dwxH) - Native macOS TestFlight
 
 ![Architecture](./doc/ai.png)
 

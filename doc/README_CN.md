@@ -26,6 +26,14 @@
 
 **状态：积极开发中** 🚧
 
+**欢迎使用 Rustun！** 🎉 下载我们的原生应用以获得最佳体验：
+
+![](../screenshot.png)
+
+
+- 📱 [iOS 应用](https://testflight.apple.com/join/2zf3dwxH) - TestFlight 测试版
+- 🍎 [macOS 应用](https://testflight.apple.com/join/2zf3dwxH) - macOS TestFlight 测试版
+
 ![架构图](./arch.png)
 
 ## ✨ 核心特性
