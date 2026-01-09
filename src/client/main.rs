@@ -7,6 +7,7 @@ use crate::client::relay::{RelayHandler, new_relay_handler};
 use crate::client::p2p::peer::{PeerHandler};
 use crate::client::prettylog::{get_status, log_startup_banner};
 use crate::client::p2p::stun::StunClient;
+use crate::client::http::server;
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block};
 use crate::utils;
@@ -80,6 +81,15 @@ pub async fn run_client() {
             return;
         }
     };
+
+    // Start HTTP server if port is specified
+    if let Some(http_port) = args.http_port {
+        tokio::spawn(async move {
+            if let Err(e) = server::start(http_port).await {
+                tracing::error!("HTTP server error: {}", e);
+            }
+        });
+    }
 
     // Run main event loop
     run_event_loop(&mut relay_handler, &mut p2p_handler, &mut dev).await;

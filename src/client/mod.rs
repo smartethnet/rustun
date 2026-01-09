@@ -4,6 +4,7 @@ mod relay;
 pub mod main;
 mod prettylog;
 pub mod p2p;
+pub mod http;
 
 /// Default P2P UDP port for client-to-client direct connections
 ///
@@ -40,4 +41,8 @@ pub struct Args {
     /// Enable P2P direct connection (disabled by default, uses relay only)
     #[arg(long)]
     pub enable_p2p: bool,
+
+    /// HTTP status server port (disabled if not specified)
+    #[arg(long)]
+    pub http_port: Option<u16>,
 }

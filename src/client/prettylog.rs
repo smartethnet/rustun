@@ -5,8 +5,11 @@
 use crate::client::Args;
 use crate::client::p2p::peer::PeerHandler;
 use crate::client::relay::RelayHandler;
+use crate::client::http::{StatusResponse, TrafficStats, RelayStatusInfo, P2PStatus, P2PPeerInfo, IPv6ConnectionInfo, STUNConnectionInfo, ClusterPeerInfo};
+use crate::client::http::cache;
 use crate::codec::frame::HandshakeReplyFrame;
 use crate::utils::device::DeviceHandler;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn log_startup_banner(args: &Args) {
     println!("====================================");
@@ -162,4 +165,134 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &
     }
     
     println!();
+    
+    // Update HTTP cache
+    let status = build_status_response(relay, peer, dev).await;
+    cache::update(status).await;
+}
+
+/// Build status response for HTTP API
+pub async fn build_status_response(
+    relay: &RelayHandler,
+    peer: Option<&PeerHandler>,
+    dev: &DeviceHandler,
+) -> StatusResponse {
+    // Traffic stats
+    let traffic = TrafficStats {
+        receive_bytes: dev.tx_bytes as u64,
+        receive_bytes_mb: dev.tx_bytes as f64 / 1024.0 / 1024.0,
+        send_bytes: dev.rx_bytes as u64,
+        send_bytes_mb: dev.rx_bytes as f64 / 1024.0 / 1024.0,
+    };
+
+    // Relay status
+    let relay_status = relay.get_status();
+    let relay = RelayStatusInfo {
+        rx_frames: relay_status.rx_frame,
+        rx_errors: relay_status.rx_error,
+        tx_frames: relay_status.tx_frame,
+        tx_errors: relay_status.tx_error,
+    };
+
+    // P2P status
+    let p2p = if let Some(peer_handler) = peer {
+        let peer_statuses = peer_handler.get_status().await;
+        let mut peers = Vec::new();
+        
+        for status in peer_statuses {
+            let ipv6 = status.ipv6_addr.map(|addr| {
+                let last_active_seconds = status.ipv6_last_active.map(|instant| {
+                    instant.elapsed().as_secs()
+                });
+                IPv6ConnectionInfo {
+                    address: addr.to_string(),
+                    connected: last_active_seconds.is_some(),
+                    last_active_seconds_ago: last_active_seconds,
+                }
+            });
+
+            let stun = status.stun_addr.map(|addr| {
+                let last_active_seconds = status.stun_last_active.map(|instant| {
+                    instant.elapsed().as_secs()
+                });
+                STUNConnectionInfo {
+                    address: addr.to_string(),
+                    connected: last_active_seconds.is_some(),
+                    last_active_seconds_ago: last_active_seconds,
+                }
+            });
+
+            peers.push(P2PPeerInfo {
+                identity: status.identity.clone(),
+                ipv6,
+                stun,
+            });
+        }
+
+        P2PStatus {
+            enabled: true,
+            peers,
+        }
+    } else {
+        P2PStatus {
+            enabled: false,
+            peers: Vec::new(),
+        }
+    };
+
+    // Cluster peers
+    let others = dev.get_peer_details();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let cluster_peers = others
+        .into_iter()
+        .map(|peer| {
+            let status = if peer.last_active == 0 {
+                "offline".to_string()
+            } else {
+                let elapsed = now.saturating_sub(peer.last_active);
+                if elapsed < 30 {
+                    "online".to_string()
+                } else if elapsed < 120 {
+                    "warning".to_string()
+                } else {
+                    "inactive".to_string()
+                }
+            };
+
+            ClusterPeerInfo {
+                identity: peer.identity,
+                private_ip: peer.private_ip,
+                cidrs: peer.ciders,
+                ipv6: if peer.ipv6.is_empty() {
+                    None
+                } else {
+                    Some(peer.ipv6)
+                },
+                ipv6_port: if peer.port > 0 { Some(peer.port) } else { None },
+                stun_ip: if peer.stun_ip.is_empty() {
+                    None
+                } else {
+                    Some(peer.stun_ip)
+                },
+                stun_port: if peer.stun_port > 0 {
+                    Some(peer.stun_port)
+                } else {
+                    None
+                },
+                last_active: peer.last_active,
+                status,
+            }
+        })
+        .collect();
+
+    StatusResponse {
+        traffic,
+        relay,
+        p2p,
+        cluster_peers,
+    }
 }

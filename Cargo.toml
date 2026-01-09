@@ -28,6 +28,10 @@ socket2 = "0.6.1"
 notify = "7.0"
 tokio-util = "0.7.17"
 ctrlc2 = "3.7.3"
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+once_cell = "1.20"
 
 [dev-dependencies]
 tokio-test = "0.4"
