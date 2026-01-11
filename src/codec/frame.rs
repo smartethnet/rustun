@@ -153,6 +153,9 @@ pub struct HandshakeReplyFrame {
     /// Used for routing traffic within the VPN
     pub gateway: String,
 
+    /// ciders to me
+    pub(crate) ciders: Vec<String>,
+
     /// List of other peers in the same cluster
     ///
     /// Each PeerDetail contains routing information for a peer node,

@@ -177,6 +177,9 @@ pub async fn build_status_response(
     peer: Option<&PeerHandler>,
     dev: &DeviceHandler,
 ) -> StatusResponse {
+    // Self information from relay
+    let self_info = relay.get_self_info().await;
+    
     // Traffic stats
     let traffic = TrafficStats {
         receive_bytes: dev.tx_bytes as u64,
@@ -290,6 +293,7 @@ pub async fn build_status_response(
         .collect();
 
     StatusResponse {
+        self_info,
         traffic,
         relay,
         p2p,

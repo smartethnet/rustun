@@ -1,12 +1,13 @@
 use crate::client::Args;
 use crate::client::prettylog::log_handshake_success;
+use crate::client::http::SelfInfo;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
 use crate::network::{create_connection, Connection, ConnectionConfig, TCPConnectionConfig};
 use crate::utils;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{Duration, interval};
 
 const OUTBOUND_BUFFER_SIZE: usize = 1000;
@@ -211,6 +212,9 @@ pub struct RelayHandler {
     inbound_tx: mpsc::Sender<Frame>,
     block: Arc<Box<dyn Block>>,
     metrics: RelayStatus,
+    // Self information
+    config: Option<RelayClientConfig>,
+    handshake_reply: Arc<RwLock<Option<HandshakeReplyFrame>>>,
 }
 
 impl RelayHandler {
@@ -222,11 +226,37 @@ impl RelayHandler {
             inbound_tx,
             block,
             metrics: Default::default(),
+            config: None,
+            handshake_reply: Arc::new(RwLock::new(None)),
+        }
+    }
+    
+    /// Get self information
+    pub async fn get_self_info(&self) -> Option<SelfInfo> {
+        let reply_guard = self.handshake_reply.read().await;
+        match (&self.config, reply_guard.as_ref()) {
+            (Some(cfg), Some(reply)) => {
+                Some(SelfInfo {
+                    identity: cfg.identity.clone(),
+                    private_ip: reply.private_ip.clone(),
+                    mask: reply.mask.clone(),
+                    gateway: reply.gateway.clone(),
+                    ciders: reply.ciders.clone(),
+                    ipv6: cfg.ipv6.clone(),
+                    port: cfg.port,
+                    stun_ip: cfg.stun_ip.clone(),
+                    stun_port: cfg.stun_port,
+                })
+            }
+            _ => None,
         }
     }
 
     pub fn run_client(&mut self, cfg: RelayClientConfig,
                       on_ready: mpsc::Sender<HandshakeReplyFrame>) {
+        // Store config
+        self.config = Some(cfg.clone());
+        
         let (outbound_tx, outbound_rx) = mpsc::channel(cfg.outbound_buffer_size);
         let mut client = RelayClient::new(
             cfg.clone(),
@@ -235,6 +265,9 @@ impl RelayHandler {
             self.block.clone(),
         );
         self.outbound_tx = Some(outbound_tx);
+        
+        // Store handshake reply when received
+        let handshake_reply = self.handshake_reply.clone();
 
         tokio::spawn(async move {
             loop {
@@ -257,6 +290,12 @@ impl RelayHandler {
                 };
                 
                 tracing::info!("Handshake complete with {} peers", frame.peer_details.len());
+                
+                // Store handshake reply in handler
+                {
+                    let mut guard = handshake_reply.write().await;
+                    *guard = Some(frame.clone());
+                }
                 
                 if let Err(e) = on_ready.send(frame.clone()).await {
                     tracing::error!("on ready send fail: {}", e);

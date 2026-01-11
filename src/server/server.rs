@@ -144,6 +144,7 @@ impl Handler {
                 private_ip: client_config.private_ip.clone(),
                 mask: client_config.mask.clone(),
                 gateway: client_config.gateway.clone(),
+                ciders: client_config.ciders.clone(),
                 peer_details: route_items,
             }))
             .await?;

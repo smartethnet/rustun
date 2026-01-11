@@ -5,10 +5,25 @@ use serde::Serialize;
 /// Complete status response structure
 #[derive(Serialize, Debug, Clone)]
 pub struct StatusResponse {
+    pub self_info: Option<SelfInfo>,
     pub traffic: TrafficStats,
     pub relay: RelayStatusInfo,
     pub p2p: P2PStatus,
     pub cluster_peers: Vec<ClusterPeerInfo>,
+}
+
+/// Self/client information
+#[derive(Serialize, Debug, Clone)]
+pub struct SelfInfo {
+    pub identity: String,
+    pub private_ip: String,
+    pub mask: String,
+    pub gateway: String,
+    pub ciders: Vec<String>,
+    pub ipv6: String,
+    pub port: u16,
+    pub stun_ip: String,
+    pub stun_port: u16,
 }
 
 /// Traffic statistics
