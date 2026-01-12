@@ -209,7 +209,7 @@ pub async fn build_status_response(
                 });
                 IPv6ConnectionInfo {
                     address: addr.to_string(),
-                    connected: last_active_seconds.is_some(),
+                    connected: last_active_seconds.is_some() && last_active_seconds.unwrap() < 30,
                     last_active_seconds_ago: last_active_seconds,
                 }
             });
