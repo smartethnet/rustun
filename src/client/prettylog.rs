@@ -269,7 +269,7 @@ pub async fn build_status_response(
             ClusterPeerInfo {
                 identity: peer.identity,
                 private_ip: peer.private_ip,
-                cidrs: peer.ciders,
+                ciders: peer.ciders,
                 ipv6: if peer.ipv6.is_empty() {
                     None
                 } else {

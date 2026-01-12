@@ -82,7 +82,7 @@ pub struct STUNConnectionInfo {
 pub struct ClusterPeerInfo {
     pub identity: String,
     pub private_ip: String,
-    pub cidrs: Vec<String>,
+    pub ciders: Vec<String>,
     pub ipv6: Option<String>,
     pub ipv6_port: Option<u16>,
     pub stun_ip: Option<String>,
