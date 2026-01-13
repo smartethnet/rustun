@@ -262,12 +262,12 @@ impl Handler {
                 tracing::info!("on keepalive from {} {}:{} {}:{}",
                     frame.identity, frame.ipv6, frame.port, frame.stun_ip, frame.stun_port);
 
-                // Update connection metadata with latest IPv6 and port from keepalive
-                // If the address changed, notify other clients in the cluster
-                if let Some(cluster) = &self.cluster {
+                let client = self.client_manager.get_client(&frame.identity);
+                if let Some(client) = client {
                     let _ = self.connection_manager.update_connection_info(
-                        cluster,
+                        &client.cluster,
                         &frame.identity,
+                        client.ciders.clone(),
                         frame.ipv6.clone(),
                         frame.port,
                         frame.stun_ip.clone(),

@@ -106,6 +106,7 @@ impl ConnectionManager {
     /// * `Some(Vec<ConnectionMeta>)` - List of other connections in the cluster if the address changed
     /// * `None` - If the address didn't change or the connection wasn't found
     pub fn update_connection_info(&self, cluster: &str, identity: &String,
+                                  ciders: Vec<String>,
                                   ipv6: String, port: u16,
                                   stun_ip: String, stun_port: u16) -> Option<Vec<ConnectionMeta>> {
         let mut cluster_map = self
@@ -129,6 +130,11 @@ impl ConnectionManager {
                 changed = true;
                 conn.stun_ip = stun_ip.clone();
                 conn.stun_port = stun_port;
+            }
+
+            if conn.ciders != ciders {
+                changed = true;
+                conn.ciders = ciders;
             }
 
             if !changed {

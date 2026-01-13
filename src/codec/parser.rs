@@ -41,7 +41,7 @@ impl Parser {
         let payload_size = u16::from_be_bytes([buf[6], buf[7]]);
 
         if !Self::validate(magic, version, payload_size, buf) {
-            tracing::warn!("validate header fail: magic = {} version={} payload_size={} buf size={}", magic, version, payload_size, buf.len());
+            tracing::debug!("validate header fail: magic = {} version={} payload_size={} buf size={}", magic, version, payload_size, buf.len());
             return Err(FrameError::Invalid.into());
         }
 
