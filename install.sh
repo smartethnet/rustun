@@ -59,7 +59,7 @@ get_latest_version() {
     
     # Try to get latest version from GitHub API
     if command -v curl >/dev/null 2>&1; then
-        VERSION=$(curl -fsSL "${GITHUB_API}" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' | head -n 1)
+        VERSION=$(curl -fsSL "${GITHUB_API}" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | head -n 1)
     fi
     
     # Fallback to default version if API call fails
