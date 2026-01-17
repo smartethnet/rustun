@@ -1,24 +1,38 @@
 # Example server configuration file for Rustun VPN
 
-[server_config]
-# Address and port to listen on
-# 0.0.0.0 listens on all interfaces
-# Use 127.0.0.1 for local only
-listen_addr = "0.0.0.0:8080"
-
 [crypto_config]
 # Encryption method (choose one):
 # - chacha20poly1305: High security, good performance (recommended)
-# - aes256gcm: High security, hardware acceleration on supported CPUs
+# - aes256: High security, hardware acceleration on supported CPUs
 # - xor: Fast but low security (for testing only)
 # - plain: No encryption (for debugging only)
 
 chacha20poly1305 = "your-secret-key-here"
 
 # Alternative encryption options (uncomment to use):
-# aes256gcm = "your-secret-key-here"
+# aes256 = "your-secret-key-here"
 # xor = "your-secret-key-here"
-# plain = true
+# crypto_config="plain"
+
+[server_config]
+# Address and port to listen on
+# 0.0.0.0 listens on all interfaces
+# Use 127.0.0.1 for local only
+listen_addr = "0.0.0.0:8080"
+
+# Optional: Conf-agent configuration for syncing with control plane
+# If configured, conf-agent will periodically fetch routes and report connection status
+# [conf_agent]
+# # Control plane API URL
+# control_plane_url = "http://localhost:8080"
+# # API token for authentication (optional)
+# api_token = "your-api-token-here"
+# # Routes file path to update (should match route_config.routes_file)
+# routes_file = "/etc/rustun/routes.json"
+# # Poll interval in seconds for fetching routes (default: 60)
+# poll_interval = 60
+# # Connection reporting interval in seconds (default: 30)
+# report_interval = 30
 
 [route_config]
 # Path to the routes configuration file

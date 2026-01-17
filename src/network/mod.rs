@@ -134,6 +134,9 @@ impl PartialEq<ConnectionMeta> for &ConnectionMeta {
 }
 
 impl ConnectionMeta {
+    pub fn dump(&self) -> String {
+        format!("{},{},{},{}", self.cluster, self.identity, self.private_ip, self.last_active)
+    }
     /// Check if a destination IP matches this connection's routing rules
     ///
     /// Returns true if the destination matches the private IP or falls

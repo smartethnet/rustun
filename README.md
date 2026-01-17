@@ -204,7 +204,7 @@ listen_addr = "0.0.0.0:8080"
 chacha20poly1305 = "your-secret-key-here"
 
 # AES-256-GCM (Hardware accelerated on modern CPUs)
-# aes256gcm = "your-secret-key-here"
+# aes256 = "your-secret-key-here"
 
 # XOR (Lightweight, for testing only)
 # xor = "test-key"

@@ -10,8 +10,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
-const OUTBOUND_BUFFER_SIZE: usize = 1000;
-
 /// Get current Unix timestamp in seconds
 #[inline]
 fn now_timestamp() -> u64 {
@@ -20,6 +18,8 @@ fn now_timestamp() -> u64 {
         .unwrap()
         .as_secs()
 }
+
+const OUTBOUND_BUFFER_SIZE: usize = 1000;
 
 pub struct Server {
     server_config: ServerConfig,
@@ -32,11 +32,12 @@ impl Server {
     pub fn new(
         server_config: ServerConfig,
         client_manager: Arc<ClientManager>,
+        connection_manager: Arc<ConnectionManager>,
         block: Arc<Box<dyn Block>>,
     ) -> Self {
         Server {
             server_config,
-            connection_manager: Arc::new(ConnectionManager::new()),
+            connection_manager,
             client_manager,
             block,
         }
@@ -195,7 +196,6 @@ impl Handler {
                         };
                     }
                 }
-                // TODO: check last_active
             }
         }
 

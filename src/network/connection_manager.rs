@@ -164,6 +164,17 @@ impl ConnectionManager {
         
         None
     }
+
+    pub fn dump_connection_info(&self) -> Vec<ConnectionMeta> {
+        let mut result = Vec::new();
+        let guard = self.cluster_connections.read().unwrap_or_else(|e| e.into_inner());
+        for (_, connections) in guard.iter() {
+            for conn in connections {
+                result.push(conn.clone());
+            }
+        }
+        result
+    }
 }
 
 impl Default for ConnectionManager {
