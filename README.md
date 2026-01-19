@@ -33,7 +33,7 @@ An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path se
 - 📱 [iOS App](https://testflight.apple.com/join/2zf3dwxH) - Available on TestFlight
 - 🍎 [macOS App](https://testflight.apple.com/join/2zf3dwxH) - Native macOS TestFlight
 
-![Architecture](./doc/ai.png)
+![Architecture](./doc/controlplane.png)
 
 ## ✨ Key Features
 
@@ -108,6 +108,7 @@ Download from [GitHub Releases](https://github.com/smartethnet/rustun/releases/l
 
 **Linux/macOS:**
 - TUN/TAP driver support (usually pre-installed)
+- `iptables` package (required for `--masq` option on Linux)
 
 ## 📦 Installation
 
@@ -315,6 +316,7 @@ sudo ./client -s SERVER_IP:8080 -i client-identity
 | `-c, --crypto` | Encryption method | `-c chacha20:my-key` |
 | `--enable-p2p` | Enable P2P mode | `--enable-p2p` |
 | `--keepalive-interval` | Keepalive interval (seconds) | `--keepalive-interval 10` |
+| `--masq` | Enable MASQUERADE/SNAT (Linux only, requires iptables) | `--masq` |
 
 ### Encryption Options
 

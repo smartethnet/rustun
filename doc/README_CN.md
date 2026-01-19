@@ -34,7 +34,7 @@
 - 📱 [iOS 应用](https://testflight.apple.com/join/2zf3dwxH) - TestFlight 测试版
 - 🍎 [macOS 应用](https://testflight.apple.com/join/2zf3dwxH) - macOS TestFlight 测试版
 
-![架构图](./arch.png)
+![架构图](./controlplane.png)
 
 ## ✨ 核心特性
 
@@ -109,6 +109,7 @@ sudo systemctl enable rustun-server
 
 **Linux/macOS：**
 - TUN/TAP 驱动支持（通常已预装）
+- `iptables` 包（Linux 上使用 `--masq` 选项时需要）
 
 ## 📦 安装
 
@@ -337,6 +338,7 @@ sudo ./client -s SERVER_IP:8080 -i client-identity
 | `-c, --crypto` | 加密方式 | `-c chacha20:my-key` |
 | `--enable-p2p` | 启用 P2P 模式 | `--enable-p2p` |
 | `--keepalive-interval` | 心跳间隔（秒） | `--keepalive-interval 10` |
+| `--masq` | 启用 MASQUERADE/SNAT（仅 Linux，需要 iptables） | `--masq` |
 
 ### 加密选项
 
