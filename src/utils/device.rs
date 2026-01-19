@@ -5,6 +5,8 @@ use tun::AbstractDevice;
 use crate::codec::frame::{HandshakeReplyFrame, PeerDetail};
 use crate::utils::sys_route::SysRoute;
 use std::collections::HashSet;
+#[allow(unused_imports)]
+use crate::utils::sys_route::{ip_to_network, mask_to_prefix_length};
 
 const DEFAULT_MTU: u16 = 1430;
 
@@ -41,7 +43,7 @@ impl Device {
         }
     }
 
-    pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>) -> crate::Result<()> {
+    pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>, name: oneshot::Sender<Option<String>>) -> crate::Result<()> {
         let mut config = tun::Configuration::default();
         config
             .address(self.ip.clone())
@@ -68,6 +70,16 @@ impl Device {
         
         #[cfg(not(target_os = "windows"))]
         let tun_index: Option<i32> = None;
+
+        // Get interface name (Linux only, for MASQUERADE)
+        #[cfg(target_os = "linux")]
+        {
+            let interface_name = dev.tun_name().ok();
+            let _ = name.send(interface_name);
+        }
+        
+        #[cfg(not(target_os = "linux"))]
+        let _ = name.send(None);
 
         let _ = ready.send(tun_index);
         let mut buf = vec![0; 2048];
@@ -102,7 +114,10 @@ impl Device {
 pub struct DeviceHandler {
     peer_details: Vec<PeerDetail>,
     private_ip: String,
+    mask: String,
+    local_ciders: Vec<String>,
     tun_index: Option<i32>,
+    interface_name: Option<String>,
     inbound_rx: Option<mpsc::Receiver<Vec<u8>>>,
     outbound_tx: Option<mpsc::Sender<Vec<u8>>>,
     pub rx_bytes: usize,
@@ -114,7 +129,10 @@ impl DeviceHandler {
         Self {
             peer_details: vec![],
             private_ip: String::new(),
+            mask: String::new(),
+            local_ciders: vec![],
             tun_index: None,
+            interface_name: None,
             inbound_rx: None,
             outbound_tx: None,
             rx_bytes: 0,
@@ -122,20 +140,23 @@ impl DeviceHandler {
         }
     }
 
-    pub async fn run(&mut self, cfg: &HandshakeReplyFrame) -> crate::Result<Option<i32>> {
+    pub async fn run(&mut self, cfg: &HandshakeReplyFrame, enable_masq: bool) -> crate::Result<Option<i32>> {
         let (inbound_tx, inbound_rx) = mpsc::channel(1000);
         let (outbound_tx, outbound_rx) = mpsc::channel(1000);
         self.inbound_rx = Some(inbound_rx);
         self.outbound_tx = Some(outbound_tx);
         self.private_ip = cfg.private_ip.clone();
+        self.mask = cfg.mask.clone();
+        self.local_ciders = cfg.ciders.clone();
 
         let mut dev = Device::new(cfg.private_ip.clone(),
                                   cfg.mask.clone(),
                                   DEFAULT_MTU,
                                   inbound_tx, outbound_rx);
         let (ready_tx, ready_rx) = oneshot::channel();
+        let (name_tx, name_rx) = oneshot::channel();
         tokio::spawn(async move {
-            let res = dev.run(ready_tx).await;
+            let res = dev.run(ready_tx, name_tx).await;
             match res {
                 Ok(_) => (),
                 Err(e) => tracing::error!("device handler fail: {:?}", e),
@@ -144,6 +165,21 @@ impl DeviceHandler {
 
         let tun_index = ready_rx.await.unwrap_or(None);
         self.tun_index = tun_index;
+
+        if let Ok(Some(name)) = name_rx.await {
+            self.interface_name = Some(name);
+        }
+
+
+        if enable_masq {
+            if let Err(e) = self.enable_masquerade() {
+                tracing::error!("Failed to enable MASQUERADE: {:?}", e);
+            }
+            if let Err(e) = self.enable_snat() {
+                tracing::warn!("Failed to enable SNAT: {:?}", e);
+            }
+        }
+
         Ok(tun_index)
     }
 
@@ -227,8 +263,57 @@ impl DeviceHandler {
         
         // Update stored routes
         self.peer_details = new_routes;
-        
+
         tracing::info!("Route reload complete");
+    }
+
+    /// Enable MASQUERADE (NAT) for VPN interface (Linux only)
+    /// Uses source network address instead of interface name for better reliability
+    pub fn enable_masquerade(&mut self) -> crate::Result<()> {
+        let cidr = self.ip_mask_to_cidr(&self.private_ip, &self.mask)?;
+        
+        let sys_route = SysRoute::new();
+        sys_route.enable_masquerade_by_source(&cidr)?;
+        Ok(())
+    }
+
+    /// Disable MASQUERADE (NAT) for VPN interface (Linux only)
+    pub fn disable_masquerade(&mut self) -> crate::Result<()> {
+        let cidr = self.ip_mask_to_cidr(&self.private_ip, &self.mask)?;
+        
+        let sys_route = SysRoute::new();
+        sys_route.disable_masquerade_by_source(&cidr)?;
+        Ok(())
+    }
+
+    /// Convert IP address and subnet mask to CIDR notation
+    fn ip_mask_to_cidr(&self, ip: &str, mask: &str) -> crate::Result<String> {
+        // Parse subnet mask to prefix length
+        let prefix_len = mask_to_prefix_length(mask)?;
+        let network = ip_to_network(ip, mask)?;
+        Ok(format!("{}/{}", network, prefix_len))
+    }
+
+    /// Enable SNAT for local network segments to use virtual IP (Linux only)
+    /// This makes packets from local ciders appear as coming from virtual IP
+    pub fn enable_snat(&mut self) -> crate::Result<()> {
+        let sys_route = SysRoute::new();
+        
+        for cidr in &self.local_ciders {
+            sys_route.enable_snat_for_local_network(cidr, "", &self.private_ip)?;
+            tracing::info!("Enabled SNAT for local network {} -> {}", cidr, self.private_ip);
+        }
+        Ok(())
+    }
+
+    /// Disable SNAT for local network segments (Linux only)
+    pub fn disable_snat(&mut self) -> crate::Result<()> {
+        let sys_route = SysRoute::new();
+        
+        for cidr in &self.local_ciders {
+            sys_route.disable_snat_for_local_network(cidr, "", &self.private_ip)?;
+        }
+        Ok(())
     }
 }
 

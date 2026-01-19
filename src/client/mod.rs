@@ -45,4 +45,10 @@ pub struct Args {
     /// HTTP status server port (disabled if not specified)
     #[arg(long)]
     pub http_port: Option<u16>,
+
+    /// Enable MASQUERADE (NAT) for VPN traffic (Linux only)
+    /// This enables iptables MASQUERADE rule to allow VPN clients to access external networks
+    #[cfg(target_os = "linux")]
+    #[arg(long)]
+    pub masq: bool,
 }

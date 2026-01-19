@@ -123,3 +123,18 @@ impl Block for Aes256Block {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_aes_256_gcm() {
+        let block = Aes256Block::from_string("rustun");
+        let msg = String::from("hello");
+        let mut msg_bytes = msg.as_bytes().to_vec();
+        block.encrypt(&mut msg_bytes).unwrap();
+        println!("msg_bytes = {:?}", msg_bytes);
+        block.decrypt(&mut msg_bytes).unwrap();
+        println!("msg_bytes = {:?}", msg_bytes);
+    }
+}

@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::sync::Arc;
+use std::sync::{Arc};
 use std::time::Duration;
 use tokio::time::interval;
 use crate::client::{Args, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
@@ -73,8 +73,25 @@ pub async fn run_client() {
         None
     };
 
+    // Check iptables availability if masq is enabled (Linux only)
+    #[cfg(target_os = "linux")]
+    {
+        if args.masq {
+            if let Err(e) = crate::utils::sys_route::SysRoute::check_iptables_available() {
+                eprintln!("❌ Error: {}", e);
+                eprintln!("\nPlease install iptables or run without --masq option.");
+                std::process::exit(1);
+            }
+        }
+    }
+
     // initialize TUN device
-    let mut dev = match init_device(&device_config).await {
+    #[cfg(target_os = "linux")]
+    let enable_masq = args.masq;
+    #[cfg(not(target_os = "linux"))]
+    let enable_masq = false;
+    
+    let mut dev = match init_device(&device_config, enable_masq).await {
         Ok(d) => d,
         Err(e) => {
             tracing::error!("Failed to initialize device: {}", e);
@@ -95,10 +112,10 @@ pub async fn run_client() {
     run_event_loop(&mut relay_handler, &mut p2p_handler, &mut dev).await;
 }
 
-async fn init_device(device_config: &HandshakeReplyFrame) -> crate::Result<DeviceHandler> {
+async fn init_device(device_config: &HandshakeReplyFrame, enable_masq: bool) -> crate::Result<DeviceHandler> {
     tracing::info!("Initializing device with config: {:?}", device_config);
     let mut dev = DeviceHandler::new();
-    let tun_index = dev.run(device_config).await?;
+    let tun_index = dev.run(device_config, enable_masq).await?;
 
     // Log TUN index (Windows only)
     if let Some(idx) = tun_index {
