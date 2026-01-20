@@ -120,6 +120,7 @@ impl PeerHandler {
         peers.insert(
             p.identity.clone(),
             PeerMeta {
+                name: p.name.clone(),
                 identity: p.identity.clone(),
                 private_ip: p.private_ip.clone(),
                 ciders: p.ciders.clone(),
@@ -459,6 +460,7 @@ impl PeerHandler {
         let mut result: Vec<PeerStatus> = Vec::new();
         for peer in guard.values() {
             let status = PeerStatus {
+                name: peer.name.clone(),
                 identity: peer.identity.clone(),
                 ipv6_addr: peer.remote_addr,
                 ipv6_last_active: peer.last_active,

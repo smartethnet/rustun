@@ -70,7 +70,7 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &
                 let prefix = if is_last { "└─" } else { "├─" };
                 let continuation = if is_last { " " } else { "│" };
                 
-                println!("   {} Peer: {}", prefix, status.identity);
+                println!("   {} Peer: {}", prefix, status.name);
                 
                 // IPv6 Direct Connection
                 let ipv6_state = match (&status.ipv6_addr, &status.ipv6_last_active) {
@@ -144,7 +144,7 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &
                 format!("{}s ago", elapsed)
             };
             
-            println!("   {} {} {} ({})", prefix, status_icon, peer.identity, online_info);
+            println!("   {} {} {} ({})", prefix, status_icon, peer.name, online_info);
             println!("   {}    ├─ Private IP: {}", continuation, peer.private_ip);
             
             if !peer.ciders.is_empty() {

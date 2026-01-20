@@ -169,6 +169,8 @@ pub struct HandshakeReplyFrame {
 /// virtual IP address, and the CIDR ranges it can route to.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PeerDetail {
+    pub name: String,
+    
     /// Unique identifier of the peer
     pub identity: String,
 

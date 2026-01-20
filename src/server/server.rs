@@ -243,6 +243,7 @@ impl Handler {
                 };
 
                 PeerDetail {
+                    name: client.name.clone(),
                     identity: client.identity.clone(),
                     private_ip: client.private_ip.clone(),
                     ciders: client.ciders.clone(),

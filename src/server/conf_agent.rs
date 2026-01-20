@@ -17,6 +17,7 @@ struct ConnectionUpdateRequest {
 /// Client config response from control plane API
 #[derive(Deserialize, Debug)]
 struct ClientConfigResponse {
+    name: String,
     cluster: String, // Cluster ID as string
     identity: String,
     private_ip: String,
@@ -173,6 +174,7 @@ impl ConfAgent {
         let client_configs: Vec<ClientConfig> = routes
             .into_iter()
             .map(|r| ClientConfig {
+                name: r.name,
                 cluster: r.cluster,
                 identity: r.identity,
                 private_ip: r.private_ip,

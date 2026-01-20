@@ -21,6 +21,7 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct PeerMeta {
+    name: String,
     /// Unique identifier of the peer (e.g., client name)
     identity: String,
 
@@ -60,6 +61,7 @@ struct PeerMeta {
 
 #[derive(Debug)]
 pub struct PeerStatus {
+    pub name: String,
     /// Unique identifier of the peer
     pub identity: String,
 

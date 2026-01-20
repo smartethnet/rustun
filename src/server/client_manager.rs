@@ -4,6 +4,8 @@ use std::sync::RwLock;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClientConfig {
+    #[serde(default)]
+    pub name: String,
     pub cluster: String,
     pub identity: String,
     pub private_ip: String,
