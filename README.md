@@ -28,6 +28,14 @@ An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path se
 
 **Welcome to Rustun!** 🎉 Download our native apps for the best experience:
 
+**🚀 Try Our Demo Environment:**
+- **Server**: `rustun.demo.beyondnetwork.cn:18080`
+- **Key**: `rustun@smartethnet.github.io`
+- **Encryption**: `xor`
+- **Web Dashboard**: [rustun.beyondnetwork.cn](https://rustun.beyondnetwork.cn) - Visual network management
+
+Quick start: `sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io`
+
 ![](screenshot.png)
 
 - 📱 [iOS App](https://testflight.apple.com/join/2zf3dwxH) - Available on TestFlight
@@ -286,6 +294,16 @@ sudo ./client -s SERVER_IP:8080 -i client-identity
 
 # Windows (as Administrator)
 .\client.exe -s SERVER_IP:8080 -i client-identity
+```
+
+**Demo Environment:**
+
+```bash
+# Connect to our demo server
+sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io
+
+# Manage your network visually at:
+# https://rustun.beyondnetwork.cn
 ```
 
 **Examples:**

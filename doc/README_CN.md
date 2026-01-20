@@ -28,6 +28,14 @@
 
 **欢迎使用 Rustun！** 🎉 下载我们的原生应用以获得最佳体验：
 
+**🚀 体验我们的演示环境：**
+- **服务器**：`rustun.demo.beyondnetwork.cn:18080`
+- **密钥**：`rustun@smartethnet.github.io`
+- **加密算法**：`xor`
+- **Web 管理界面**：[rustun.beyondnetwork.cn](https://rustun.beyondnetwork.cn) - 可视化网络管理
+
+快速开始：`sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io`
+
 ![](../screenshot.png)
 
 
@@ -308,6 +316,16 @@ sudo ./client -s SERVER_IP:8080 -i client-identity
 
 # Windows（以管理员身份）
 .\client.exe -s SERVER_IP:8080 -i client-identity
+```
+
+**演示环境：**
+
+```bash
+# 连接到我们的演示服务器
+sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io
+
+# 通过 Web 界面管理您的网络：
+# https://rustun.beyondnetwork.cn
 ```
 
 **示例：**
