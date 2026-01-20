@@ -36,13 +36,12 @@
 
 快速开始：`sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io`
 
-![](../screenshot.png)
-
+![架构图](./controlplane.png)
 
 - 📱 [iOS 应用](https://testflight.apple.com/join/2zf3dwxH) - TestFlight 测试版
 - 🍎 [macOS 应用](https://testflight.apple.com/join/2zf3dwxH) - macOS TestFlight 测试版
 
-![架构图](./controlplane.png)
+![](../screenshot.png)
 
 ## ✨ 核心特性
 

@@ -36,12 +36,12 @@ An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path se
 
 Quick start: `sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io`
 
-![](screenshot.png)
+![Architecture](./doc/controlplane.png)
 
 - 📱 [iOS App](https://testflight.apple.com/join/2zf3dwxH) - Available on TestFlight
 - 🍎 [macOS App](https://testflight.apple.com/join/2zf3dwxH) - Native macOS TestFlight
 
-![Architecture](./doc/controlplane.png)
+![](screenshot.png)
 
 ## ✨ Key Features
 
