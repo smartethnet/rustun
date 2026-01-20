@@ -56,6 +56,7 @@ pub struct P2PStatus {
 /// P2P peer connection information
 #[derive(Serialize, Debug, Clone)]
 pub struct P2PPeerInfo {
+    pub name: String,
     pub identity: String,
     pub ipv6: Option<IPv6ConnectionInfo>,
     pub stun: Option<STUNConnectionInfo>,
@@ -80,6 +81,7 @@ pub struct STUNConnectionInfo {
 /// Cluster peer information
 #[derive(Serialize, Debug, Clone)]
 pub struct ClusterPeerInfo {
+    pub name: String,
     pub identity: String,
     pub private_ip: String,
     pub ciders: Vec<String>,

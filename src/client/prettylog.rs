@@ -226,6 +226,7 @@ pub async fn build_status_response(
             });
 
             peers.push(P2PPeerInfo {
+                name: status.name.clone(),
                 identity: status.identity.clone(),
                 ipv6,
                 stun,
@@ -267,6 +268,7 @@ pub async fn build_status_response(
             };
 
             ClusterPeerInfo {
+                name: peer.name.clone(),
                 identity: peer.identity,
                 private_ip: peer.private_ip,
                 ciders: peer.ciders,
