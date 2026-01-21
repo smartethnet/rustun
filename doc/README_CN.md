@@ -24,24 +24,7 @@
 
 基于 Rust 构建的 AI 驱动智能 VPN 隧道，具备自动路径选择和智能路由能力。
 
-**状态：积极开发中** 🚧
-
-**欢迎使用 Rustun！** 🎉 下载我们的原生应用以获得最佳体验：
-
-**🚀 体验我们的演示环境：**
-- **服务器**：`rustun.demo.beyondnetwork.cn:18080`
-- **密钥**：`rustun@smartethnet.github.io`
-- **加密算法**：`xor`
-- **Web 管理界面**：[rustun.beyondnetwork.cn](https://rustun.beyondnetwork.cn) - 可视化网络管理
-
-快速开始：`sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io`
-
-![架构图](./controlplane.png)
-
-- 📱 [iOS 应用](https://testflight.apple.com/join/2zf3dwxH) - TestFlight 测试版
-- 🍎 [macOS 应用](https://testflight.apple.com/join/2zf3dwxH) - macOS TestFlight 测试版
-
-![](../screenshot.png)
+**状态：Beta** 🚧
 
 ## ✨ 核心特性
 
@@ -54,6 +37,36 @@
 - 🌍 **跨平台** - Linux、macOS、Windows 预编译二进制文件
 
 ## 📋 目录
+
+### [官方演示服务器](#-官方演示服务器)
+
+## 🎉 官方演示服务器
+
+我们提供**免费的演示服务器**，让您无需部署自己的服务器即可体验 Rustun。您可以立即连接并通过我们的 Web 管理界面管理您的网络。
+
+**快速开始：**
+
+1. **登录管理界面** - 访问 [rustun.beyondnetwork.cn](https://rustun.beyondnetwork.cn)（需要 OAuth 登录）
+
+2. **创建客户端** - 在管理界面中创建客户端，系统会为您的设备生成唯一的 `identity`
+
+3. **下载客户端** - 从 [GitHub Releases](https://github.com/smartethnet/rustun/releases/latest) 下载
+
+4. **连接演示服务器** - 使用步骤 2 中创建的 identity 连接：
+   ```bash
+   sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i <your-identity> -c xor:rustun@smartethnet.github.io
+   ```
+   将 `<your-identity>` 替换为在管理界面中创建的 identity
+
+5. **管理网络** - 在管理界面中配置路由、监控连接、添加更多客户端
+
+**移动应用：**
+- 📱 [iOS 应用](https://testflight.apple.com/join/2zf3dwxH) - TestFlight 测试版
+- 🍎 [macOS 应用](https://testflight.apple.com/join/2zf3dwxH) - TestFlight 测试版
+
+![架构图](./controlplane.png)
+
+![](../screenshot.jpg)
 
 ### 面向用户
 - [快速开始](#-快速开始)
@@ -320,10 +333,11 @@ sudo ./client -s SERVER_IP:8080 -i client-identity
 **演示环境：**
 
 ```bash
-# 连接到我们的演示服务器
-sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io
+# 1. 先登录 https://rustun.beyondnetwork.cn 创建客户端获取 identity
+# 2. 使用创建的 identity 连接演示服务器
+sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i <your-identity> -c xor:rustun@smartethnet.github.io
 
-# 通过 Web 界面管理您的网络：
+# 3. 通过 Web 界面管理您的网络：
 # https://rustun.beyondnetwork.cn
 ```
 

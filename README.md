@@ -26,23 +26,6 @@ An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path se
 
 **Status: Beta** 🚧
 
-**Welcome to Rustun!** 🎉 Download our native apps for the best experience:
-
-**🚀 Try Our Demo Environment:**
-- **Server**: `rustun.demo.beyondnetwork.cn:18080`
-- **Key**: `rustun@smartethnet.github.io`
-- **Encryption**: `xor`
-- **Web Dashboard**: [rustun.beyondnetwork.cn](https://rustun.beyondnetwork.cn) - Visual network management
-
-Quick start: `sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identity -c xor:rustun@smartethnet.github.io`
-
-![Architecture](./doc/controlplane.png)
-
-- 📱 [iOS App](https://testflight.apple.com/join/2zf3dwxH) - Available on TestFlight
-- 🍎 [macOS App](https://testflight.apple.com/join/2zf3dwxH) - Native macOS TestFlight
-
-![](screenshot.png)
-
 ## ✨ Key Features
 
 - 🔓 **Open Source** - MIT License, completely free and transparent
@@ -55,22 +38,52 @@ Quick start: `sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i your-identi
 
 ## 📋 Table of Contents
 
+### [Official Demo Server](#-official-demo-server)
+
 ### For Users
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
+- [Quick Start](#-quick-start)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Usage](#-usage)
 - [P2P Connections](#-p2p-direct-connection)
 - [Multi Tenant](#-multi-tenant-isolation)
 - [Use Cases](#-use-cases)
 
 ### For Developers
-- [Build from Source](#build-from-source)
-- [Architecture](#architecture)
-- [Contributing](#contributing)
+- [Build from Source](#-build-from-source)
+- [Architecture](#-architecture)
+- [Contributing](#-contributing)
 
 ### Roadmap
 - [Roadmap](#roadmap)
+
+## 🎉 Official Demo Server
+
+We provide a **free demo server** for you to try Rustun without deploying your own server. You can connect immediately and manage your network through our web dashboard.
+
+**Quick Start:**
+
+1. **Login to dashboard** at [rustun.beyondnetwork.cn](https://rustun.beyondnetwork.cn) (OAuth login required)
+
+2. **Create a client** in the dashboard - this will generate a unique `identity` for your device
+
+3. **Download the client** from [GitHub Releases](https://github.com/smartethnet/rustun/releases/latest)
+
+4. **Connect to demo server** using the identity from step 2:
+   ```bash
+   sudo ./client -s rustun.demo.beyondnetwork.cn:18080 -i <your-identity> -c xor:rustun@smartethnet.github.io
+   ```
+   Replace `<your-identity>` with the identity you created in the dashboard
+
+5. **Manage your network** in the dashboard - configure routes, monitor connections, and add more clients
+
+**Mobile Apps:**
+- 📱 [iOS App](https://testflight.apple.com/join/2zf3dwxH) - TestFlight beta
+- 🍎 [macOS App](https://testflight.apple.com/join/2zf3dwxH) - TestFlight beta
+
+![Architecture](./doc/controlplane.png)
+
+![](screenshot.jpg)
 
 ## 🚀 Quick Start
 
