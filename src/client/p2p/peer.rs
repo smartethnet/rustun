@@ -186,7 +186,42 @@ impl PeerHandler {
                     }
                 }
                 None => {
-                    self.add_peer(peer).await;
+                    let ipv6_remote = self.parse_address(
+                        &peer.identity,
+                        &peer.ipv6,
+                        peer.port,
+                        true, // is_ipv6
+                    );
+                    if ipv6_remote.is_some() {
+                        tracing::info!("Added IPv6 peer: {} at {}:{}", peer.identity, peer.ipv6, peer.port);
+                    }
+
+                    let stun_remote = self.parse_address(
+                        &peer.identity,
+                        &peer.stun_ip,
+                        peer.stun_port,
+                        false, // is_ipv4
+                    );
+                    if stun_remote.is_some() {
+                        tracing::info!("Added Hole Punch peer: {} at {}:{}", peer.identity, peer.ipv6, peer.port);
+                    }
+
+                    // Add or update peer in the map
+                    peers.insert(
+                        peer.identity.clone(),
+                        PeerMeta {
+                            name: peer.name.clone(),
+                            identity: peer.identity.clone(),
+                            private_ip: peer.private_ip.clone(),
+                            ciders: peer.ciders.clone(),
+                            ipv6: peer.ipv6.clone(),
+                            port: peer.port,
+                            remote_addr: ipv6_remote,
+                            stun_addr: stun_remote,
+                            last_active: None,
+                            stun_last_active: None,
+                        },
+                    );
                 }
             }
 
