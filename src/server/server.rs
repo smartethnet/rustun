@@ -142,6 +142,7 @@ impl Handler {
 
         self.conn
             .write_frame(HandshakeReply(HandshakeReplyFrame {
+                name: client_config.name.clone(),
                 private_ip: client_config.private_ip.clone(),
                 mask: client_config.mask.clone(),
                 gateway: client_config.gateway.clone(),
@@ -264,6 +265,7 @@ impl Handler {
                     frame.identity, frame.ipv6, frame.port, frame.stun_ip, frame.stun_port);
 
                 let client = self.client_manager.get_client(&frame.identity);
+                let mut name = String::new();
                 if let Some(client) = client {
                     let _ = self.connection_manager.update_connection_info(
                         &client.cluster,
@@ -274,6 +276,7 @@ impl Handler {
                         frame.stun_ip.clone(),
                         frame.stun_port,
                     );
+                    name = client.name.clone();
                 }
 
                 // Reply keepalive with full peer details for route sync
@@ -284,6 +287,7 @@ impl Handler {
                 };
 
                 let reply_frame = Frame::KeepAlive(KeepAliveFrame {
+                    name: name.clone(),
                     identity: frame.identity,
                     ipv6: frame.ipv6,
                     port: frame.port,

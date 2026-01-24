@@ -138,6 +138,7 @@ pub struct HandshakeFrame {
 /// and communicate with other VPN nodes.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HandshakeReplyFrame {
+    pub name: String,
     /// Private IP address assigned to this client
     ///
     /// This is the client's virtual IP within the VPN network
@@ -209,6 +210,7 @@ pub struct PeerDetail {
 /// direct P2P connections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeepAliveFrame {
+    pub name: String,
     /// Peer identity (unique identifier)
     pub identity: String,
     

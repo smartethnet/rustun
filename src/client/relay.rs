@@ -73,6 +73,7 @@ impl RelayClient {
 
                     tracing::debug!("sending keepalive frame");
                     let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
+                        name: "".to_string(),
                         identity: self.cfg.identity.clone(),
                         ipv6: current_ipv6.clone(),
                         port,
