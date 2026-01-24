@@ -398,6 +398,120 @@ impl SysRoute {
     pub fn disable_snat_for_local_network(&self, _local_cidr: &str, _tun_interface: &str, _virtual_ip: &str) -> crate::Result<()> {
         Ok(())
     }
+
+    /// Enable DNAT/NETMAP for CIDR mapping (Linux only)
+    /// Maps destination IPs from mapped CIDR to real CIDR
+    /// Uses NETMAP target: iptables -t nat -A PREROUTING -d <mapped_cidr> -j NETMAP --to <real_cidr>
+    /// 
+    /// # Arguments
+    /// * `mapped_cidr` - The CIDR that other clients see (e.g., "192.168.11.0/24")
+    /// * `real_cidr` - The real CIDR network (e.g., "192.168.10.0/24")
+    /// 
+    /// # Example
+    /// When a packet arrives with destination IP in `mapped_cidr`, it will be translated
+    /// to the corresponding IP in `real_cidr` before being forwarded to the local network.
+    #[cfg(target_os = "linux")]
+    pub fn enable_cidr_dnat(&self, mapped_cidr: &str, real_cidr: &str) -> crate::Result<()> {
+        // Check if NETMAP rule already exists: iptables -t nat -C PREROUTING -d <mapped_cidr> -j NETMAP --to <real_cidr>
+        let check_output = Command::new("iptables")
+            .args([
+                "-t", "nat",
+                "-C", "PREROUTING",
+                "-d", mapped_cidr,
+                "-j", "NETMAP",
+                "--to", real_cidr,
+            ])
+            .output();
+
+        match check_output {
+            Ok(output) if output.status.success() => {
+                tracing::debug!("DNAT rule already exists: {} -> {}", mapped_cidr, real_cidr);
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        // Add NETMAP rule: iptables -t nat -A PREROUTING -d <mapped_cidr> -j NETMAP --to <real_cidr>
+        let output = Command::new("iptables")
+            .args([
+                "-t", "nat",
+                "-A", "PREROUTING",
+                "-d", mapped_cidr,
+                "-j", "NETMAP",
+                "--to", real_cidr,
+            ])
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    format!(
+                        "iptables command not found. CIDR mapping requires iptables with NETMAP support.\n\
+                        Please install iptables and ensure your kernel supports NETMAP target.\n\
+                        NETMAP requires Linux kernel 2.6.32+ with netfilter NETMAP module."
+                    )
+                } else {
+                    format!("Failed to execute iptables command: {}", e)
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Check if NETMAP is not supported
+            if stderr.contains("No chain/target/match") || stderr.contains("NETMAP") {
+                return Err(format!(
+                    "NETMAP target not supported. CIDR mapping requires kernel support for NETMAP.\n\
+                    Please ensure your kernel has NETMAP support (Linux 2.6.32+) or use a different approach.\n\
+                    Error: {}", stderr
+                ).into());
+            }
+            return Err(format!("Failed to add DNAT rule: {}", stderr).into());
+        }
+
+        tracing::info!("Added DNAT rule: {} -> {}", mapped_cidr, real_cidr);
+        Ok(())
+    }
+
+    /// Disable DNAT/NETMAP for CIDR mapping (Linux only)
+    /// Removes the NETMAP rule that was previously added
+    /// 
+    /// # Arguments
+    /// * `mapped_cidr` - The mapped CIDR (e.g., "192.168.11.0/24")
+    /// * `real_cidr` - The real CIDR (e.g., "192.168.10.0/24")
+    #[cfg(target_os = "linux")]
+    pub fn disable_cidr_dnat(&self, mapped_cidr: &str, real_cidr: &str) -> crate::Result<()> {
+        let output = Command::new("iptables")
+            .args([
+                "-t", "nat",
+                "-D", "PREROUTING",
+                "-d", mapped_cidr,
+                "-j", "NETMAP",
+                "--to", real_cidr,
+            ])
+            .output()
+            .map_err(|e| format!("Failed to execute iptables command: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Ignore "not found" error (rule already deleted)
+            if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("No rule") {
+                tracing::debug!("DNAT rule not found (already deleted): {} -> {}", mapped_cidr, real_cidr);
+                return Ok(());
+            }
+            return Err(format!("Failed to delete DNAT rule: {}", stderr).into());
+        }
+
+        tracing::info!("Deleted DNAT rule: {} -> {}", mapped_cidr, real_cidr);
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn enable_cidr_dnat(&self, _mapped_cidr: &str, _real_cidr: &str) -> crate::Result<()> {
+        Err("CIDR mapping DNAT is only supported on Linux".into())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn disable_cidr_dnat(&self, _mapped_cidr: &str, _real_cidr: &str) -> crate::Result<()> {
+        Err("CIDR mapping DNAT is only supported on Linux".into())
+    }
 }
 
 impl Default for SysRoute {

@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 use tun::AbstractDevice;
 use crate::codec::frame::{HandshakeReplyFrame, PeerDetail};
 use crate::utils::sys_route::SysRoute;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 #[allow(unused_imports)]
 use crate::utils::sys_route::{ip_to_network, mask_to_prefix_length};
 
@@ -313,6 +313,34 @@ impl DeviceHandler {
         for cidr in &self.local_ciders {
             sys_route.disable_snat_for_local_network(cidr, "", &self.private_ip)?;
         }
+        Ok(())
+    }
+
+    /// Setup CIDR mapping DNAT rules based on HandshakeReplyFrame
+    /// This should be called after receiving HandshakeReplyFrame
+    /// Maps destination IPs from mapped CIDR to real CIDR using iptables NETMAP
+    #[cfg(target_os = "linux")]
+    pub fn setup_cidr_mapping(&mut self, cidr_mapping: &HashMap<String, String>) -> crate::Result<()> {
+        let sys_route = SysRoute::new();
+        
+        for (mapped_cidr, real_cidr) in cidr_mapping {
+            // Add DNAT rule (iptables will check if it already exists)
+            if let Err(e) = sys_route.enable_cidr_dnat(mapped_cidr, real_cidr) {
+                tracing::error!(
+                    "Failed to add DNAT rule for {} -> {}: {}", 
+                    mapped_cidr, real_cidr, e
+                );
+                return Err(e);
+            }
+            
+            tracing::info!("Added DNAT rule for CIDR mapping: {} -> {}", mapped_cidr, real_cidr);
+        }
+        
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn setup_cidr_mapping(&mut self, _cidr_mapping: &HashMap<String, String>) -> crate::Result<()> {
         Ok(())
     }
 }

@@ -34,6 +34,7 @@ An AI-driven intelligent VPN tunnel built with Rust, featuring automatic path se
 - 🔐 **Secure Encryption** - ChaCha20-Poly1305 (default), AES-256-GCM, XOR/Plain options
 - 🚀 **Dual-Path P2P** - IPv6 direct connection + STUN hole punching with auto-fallback to relay
 - 🌐 **Smart Routing** - Automatic path selection: IPv6 (lowest latency) → STUN (NAT traversal) → Relay
+- 🔄 **CIDR Mapping** - Resolve network conflicts by mapping overlapping CIDR ranges (Linux only)
 - 🌍 **Cross-Platform** - Linux, macOS, Windows with pre-built binaries
 
 ## 📋 Table of Contents
@@ -273,7 +274,8 @@ Create or edit `/etc/rustun/routes.json`:
 | `private_ip` | Virtual IP assigned to the client | `"10.0.1.1"` |
 | `mask` | Subnet mask for the VPN network | `"255.255.255.0"` |
 | `gateway` | Gateway IP for routing | `"10.0.1.254"` |
-| `ciders` | CIDR ranges routable through this client | `["192.168.1.0/24"]` |
+| `ciders` | CIDR ranges routable through this client (mapped CIDRs that other clients see) | `["192.168.1.0/24"]` |
+| `cider_mapping` | CIDR mapping to resolve network conflicts (Linux only). Maps `ciders` to real network CIDRs | `{"192.168.11.0/24": "192.168.10.0/24"}` |
 
 ## 📖 Usage
 

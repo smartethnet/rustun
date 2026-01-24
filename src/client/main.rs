@@ -124,6 +124,15 @@ async fn init_device(device_config: &HandshakeReplyFrame, enable_masq: bool) -> 
 
     dev.reload_route(device_config.peer_details.clone()).await;
     
+    // Setup CIDR mapping DNAT rules
+    if !device_config.cider_mapping.is_empty() {
+        if let Err(e) = dev.setup_cidr_mapping(&device_config.cider_mapping) {
+            tracing::error!("Failed to setup CIDR mapping DNAT rules: {}", e);
+            // Don't fail initialization, just log the error
+            // This allows the client to continue even if DNAT setup fails
+        }
+    }
+    
     Ok(dev)
 }
 

@@ -12,6 +12,9 @@ pub struct ClientConfig {
     pub mask: String,
     pub gateway: String,
     pub ciders: Vec<String>,
+    // virtual cidr to actual cidr
+    #[serde(default)]
+    pub cider_mapping: HashMap<String, String>,
 }
 
 pub struct ClientManager {

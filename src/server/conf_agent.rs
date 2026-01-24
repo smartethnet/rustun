@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::server::client_manager::{ClientConfig, ClientManager};
 use crate::server::config::ConfAgentConfig;
 use crate::network::connection_manager::ConnectionManager;
@@ -24,6 +25,8 @@ struct ClientConfigResponse {
     mask: String,
     gateway: String,
     ciders: Vec<String>,
+    #[serde(default)]
+    cider_mapping: HashMap<String, String>,
 }
 
 pub struct ConfAgent {
@@ -181,6 +184,7 @@ impl ConfAgent {
                 mask: r.mask,
                 gateway: r.gateway,
                 ciders: r.ciders,
+                cider_mapping: r.cider_mapping,
             })
             .collect();
 

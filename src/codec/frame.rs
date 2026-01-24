@@ -15,6 +15,7 @@
 //! - Type: Frame type identifier (1 byte)
 //! - Payload Length: Length of the payload in bytes (2 bytes, big-endian)
 
+use std::collections::HashMap;
 pub(crate) use crate::codec::errors::FrameError;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -157,6 +158,9 @@ pub struct HandshakeReplyFrame {
     /// ciders to me
     pub(crate) ciders: Vec<String>,
 
+    /// ciders mapping
+    pub cider_mapping: HashMap<String, String>,
+
     /// List of other peers in the same cluster
     ///
     /// Each PeerDetail contains routing information for a peer node,
@@ -184,7 +188,7 @@ pub struct PeerDetail {
     /// Traffic destined for these ranges will be routed through this peer
     pub ciders: Vec<String>,
 
-    /// IPv6 is public ip address of ther peer
+    /// IPv6 is public ip address of their peer
     pub ipv6: String,
 
     pub port: u16,
@@ -213,10 +217,10 @@ pub struct KeepAliveFrame {
     pub name: String,
     /// Peer identity (unique identifier)
     pub identity: String,
-    
+
     /// Public IPv6 address
     pub ipv6: String,
-    
+
     /// UDP port for P2P connections
     pub port: u16,
 
