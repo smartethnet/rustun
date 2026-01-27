@@ -247,20 +247,24 @@ Create or edit `/etc/rustun/routes.json`:
 ```json
 [
   {
+    "name": "Production Gateway 01",
     "cluster": "production",
     "identity": "prod-gateway-01",
     "private_ip": "10.0.1.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": ["192.168.100.0/24", "192.168.101.0/24"]
+    "ciders": ["192.168.100.0/24", "192.168.101.0/24"],
+    "cider_mapping": {}
   },
   {
+    "name": "Production App Server 01",
     "cluster": "production",
     "identity": "prod-app-server-01",
     "private_ip": "10.0.1.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   }
 ]
 ```
@@ -269,6 +273,7 @@ Create or edit `/etc/rustun/routes.json`:
 
 | Field | Description | Example |
 |-------|-------------|---------|
+| `name` | Human-readable client name (optional, defaults to empty string) | `"Production Gateway"` |
 | `cluster` | Logical group for multi-tenancy isolation | `"production"` |
 | `identity` | Unique client identifier | `"prod-app-01"` |
 | `private_ip` | Virtual IP assigned to the client | `"10.0.1.1"` |
@@ -412,36 +417,44 @@ Rustun supports cluster-based multi-tenancy for complete network isolation betwe
 ```json
 [
   {
+    "name": "Production Gateway",
     "cluster": "production",
     "identity": "prod-gateway",
     "private_ip": "10.0.1.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": ["192.168.100.0/24"]
+    "ciders": ["192.168.100.0/24"],
+    "cider_mapping": {}
   },
   {
+    "name": "Production App 01",
     "cluster": "production",
     "identity": "prod-app-01",
     "private_ip": "10.0.1.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   },
   {
+    "name": "Development Workstation 01",
     "cluster": "development",
     "identity": "dev-workstation-01",
     "private_ip": "10.0.2.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.2.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   },
   {
+    "name": "Development Workstation 02",
     "cluster": "development",
     "identity": "dev-workstation-02",
     "private_ip": "10.0.2.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.2.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   }
 ]
 ```

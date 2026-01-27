@@ -1,5 +1,6 @@
 [
   {
+    "name": "Production Gateway 01",
     "cluster": "production",
     "identity": "prod-gateway-01",
     "private_ip": "10.0.1.1",
@@ -9,6 +10,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Production App Server 01",
     "cluster": "production",
     "identity": "prod-app-server-01",
     "private_ip": "10.0.1.2",
@@ -18,6 +20,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Production DB Server 01",
     "cluster": "production",
     "identity": "prod-db-server-01",
     "private_ip": "10.0.1.3",
@@ -27,6 +30,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Staging Gateway 01",
     "cluster": "staging",
     "identity": "staging-gateway-01",
     "private_ip": "10.0.2.1",
@@ -36,6 +40,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Staging App Server 01",
     "cluster": "staging",
     "identity": "staging-app-server-01",
     "private_ip": "10.0.2.2",
@@ -45,6 +50,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Development Workstation 01",
     "cluster": "development",
     "identity": "dev-workstation-01",
     "private_ip": "10.0.3.1",
@@ -54,6 +60,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Development Workstation 02",
     "cluster": "development",
     "identity": "dev-workstation-02",
     "private_ip": "10.0.3.2",
@@ -63,6 +70,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Remote Worker Alice",
     "cluster": "remote-workers",
     "identity": "remote-alice",
     "private_ip": "10.0.100.1",
@@ -72,6 +80,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Remote Worker Bob",
     "cluster": "remote-workers",
     "identity": "remote-bob",
     "private_ip": "10.0.100.2",
@@ -81,6 +90,7 @@
     "cider_mapping": {}
   },
   {
+    "name": "Client with Network Conflict",
     "cluster": "production",
     "identity": "client-with-conflict",
     "private_ip": "10.0.1.4",

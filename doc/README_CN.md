@@ -254,20 +254,24 @@ openssl rand -base64 32
 ```json
 [
   {
+    "name": "生产网关 01",
     "cluster": "production",
     "identity": "prod-gateway-01",
     "private_ip": "10.0.1.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": ["192.168.100.0/24", "192.168.101.0/24"]
+    "ciders": ["192.168.100.0/24", "192.168.101.0/24"],
+    "cider_mapping": {}
   },
   {
+    "name": "生产应用服务器 01",
     "cluster": "production",
     "identity": "prod-app-server-01",
     "private_ip": "10.0.1.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   }
 ]
 ```
@@ -276,6 +280,7 @@ openssl rand -base64 32
 
 | 字段 | 说明 | 示例 |
 |------|------|------|
+| `name` | 人类可读的客户端名称（可选，默认为空字符串） | `"生产网关"` |
 | `cluster` | 多租户隔离的逻辑组 | `"production"` |
 | `identity` | 客户端唯一标识符 | `"prod-app-01"` |
 | `private_ip` | 分配给客户端的虚拟 IP | `"10.0.1.1"` |
@@ -442,36 +447,44 @@ Rustun 支持基于集群的多租户，实现不同团队或业务单元之间�
 ```json
 [
   {
+    "name": "生产网关",
     "cluster": "production",
     "identity": "prod-gateway",
     "private_ip": "10.0.1.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": ["192.168.100.0/24"]
+    "ciders": ["192.168.100.0/24"],
+    "cider_mapping": {}
   },
   {
+    "name": "生产应用 01",
     "cluster": "production",
     "identity": "prod-app-01",
     "private_ip": "10.0.1.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.1.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   },
   {
+    "name": "开发工作站 01",
     "cluster": "development",
     "identity": "dev-workstation-01",
     "private_ip": "10.0.2.1",
     "mask": "255.255.255.0",
     "gateway": "10.0.2.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   },
   {
+    "name": "开发工作站 02",
     "cluster": "development",
     "identity": "dev-workstation-02",
     "private_ip": "10.0.2.2",
     "mask": "255.255.255.0",
     "gateway": "10.0.2.254",
-    "ciders": []
+    "ciders": [],
+    "cider_mapping": {}
   }
 ]
 ```
