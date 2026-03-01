@@ -10,7 +10,7 @@ use std::time::Instant;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{Duration, interval};
 
-const OUTBOUND_BUFFER_SIZE: usize = 1000;
+const CHANNEL_BUFFER_SIZE: usize = 1000;
 const CONFIG_CHANNEL_SIZE: usize = 10;
 
 #[derive(Clone)]
@@ -220,7 +220,7 @@ pub struct RelayHandler {
 
 impl RelayHandler {
     pub fn new(block: Arc<Box<dyn Block>>) -> RelayHandler {
-        let (inbound_tx, inbound_rx) = mpsc::channel(10);
+        let (inbound_tx, inbound_rx) = mpsc::channel(CHANNEL_BUFFER_SIZE);
         RelayHandler {
             outbound_tx: None,
             inbound_rx,
@@ -318,8 +318,7 @@ impl RelayHandler {
                 self.metrics.tx_error += 1;
                 return Err("relay connection disconnect".into())}
         };
-
-        let result = outbound_tx.send(frame).await;
+        let result = outbound_tx.send_timeout(frame, Duration::from_secs(1)).await;
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -355,7 +354,7 @@ pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>,
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
         keepalive_interval: Duration::from_secs(args.keepalive_interval),
-        outbound_buffer_size: OUTBOUND_BUFFER_SIZE,
+        outbound_buffer_size: CHANNEL_BUFFER_SIZE,
         keep_alive_thresh: args.keepalive_threshold,
         identity: args.identity.clone(),
         ipv6,
