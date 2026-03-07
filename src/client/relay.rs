@@ -310,19 +310,17 @@ impl RelayHandler {
         });
     }
 
-    pub async fn send_frame(&mut self, frame: Frame) -> crate::Result<()> {
-        self.metrics.tx_frame += 1;
-        let outbound_tx = match self.outbound_tx.clone() {
-            Some(tx) => tx,
-            None => {
-                self.metrics.tx_error += 1;
-                return Err("relay connection disconnect".into())}
-        };
+    pub fn get_outbound_tx(&self)-> Option<mpsc::Sender<Frame>> {
+        self.outbound_tx.clone()
+    }
+
+    pub async fn send_frame(outbound_tx: mpsc::Sender<Frame>, frame: Frame) -> crate::Result<()> {
+        // self.metrics.tx_frame += 1;
         let result = outbound_tx.send_timeout(frame, Duration::from_secs(1)).await;
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                self.metrics.tx_error += 1;
+                // self.metrics.tx_error += 1;
                 Err(format!("device=> server fail {:?}", e).into())
             },
         }

@@ -183,6 +183,10 @@ impl DeviceHandler {
         Ok(tun_index)
     }
 
+    pub fn get_dev_inbound(&mut self) -> Option<mpsc::Receiver<Vec<u8>>> {
+        self.inbound_rx.take()
+    }
+
     pub async fn recv(&mut self) -> Option<Vec<u8>> {
         let inbound_rx = match self.inbound_rx.as_mut() {
             Some(rx) => rx,
