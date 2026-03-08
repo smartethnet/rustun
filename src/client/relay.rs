@@ -316,7 +316,7 @@ impl RelayHandler {
 
     pub async fn send_frame(outbound_tx: mpsc::Sender<Frame>, frame: Frame) -> crate::Result<()> {
         // self.metrics.tx_frame += 1;
-        let result = outbound_tx.send_timeout(frame, Duration::from_secs(1)).await;
+        let result = outbound_tx.send(frame).await;
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
