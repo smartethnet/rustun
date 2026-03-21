@@ -5,6 +5,7 @@ use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveF
 use crate::crypto::Block;
 use crate::network::{ConnManage, ConnectionConfig, TCPConnectionConfig, create_connection};
 use crate::utils::{self, StunAddr};
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{RwLock, mpsc};
@@ -65,34 +66,19 @@ impl RelayClient {
         loop {
             tokio::select! {
                 _ = keepalive_ticker.tick() => {
-                    if last_active.elapsed().as_secs() > timeout_secs {
-                        tracing::warn!("keepalive threshold {:?} exceeded", last_active.elapsed());
+                    if let ControlFlow::Break(_) = self
+                        .keep_alive(
+                            &mut conn,
+                            &mut keepalive_wait,
+                            &current_ipv6,
+                            port,
+                            stun.as_ref(),
+                            last_active,
+                            timeout_secs,
+                        )
+                        .await
+                    {
                         break;
-                    }
-
-                    tracing::debug!("sending keepalive frame");
-                    let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
-                        name: "".to_string(),
-                        identity: self.cfg.identity.clone(),
-                        ipv6: current_ipv6.clone(),
-                        port,
-                        #[allow(clippy::unwrap_or_default)]
-                        stun_ip: stun.as_ref().map(|stun| stun.ip.clone()).unwrap_or(String::new()),
-                        stun_port: stun.as_ref().map(|stun| stun.port).unwrap_or(0),
-                        peer_details: vec![], // Client doesn't need to send peer info
-                    });
-                    match conn.write_frame(keepalive_frame).await {
-                        Ok(_) => {
-                            keepalive_wait = 0;
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to send keepalive: {}", e);
-                            keepalive_wait+=1;
-                            if keepalive_wait > self.cfg.keep_alive_thresh {
-                                tracing::error!("keepalive max retry, close connection");
-                                break;
-                            }
-                        }
                     }
                 }
 
@@ -110,35 +96,8 @@ impl RelayClient {
 
                 // inbound
                 result = conn.read_frame() => {
-                    last_active = Instant::now();
-                    match result {
-                        Ok(frame) => {
-                            tracing::debug!("received frame {}", frame);
-                            let beg = Instant::now();
-                            match frame {
-                                Frame::KeepAlive(keepalive) => {
-                                    keepalive_wait = keepalive_wait.saturating_sub(1);
-
-                                    tracing::debug!("Received keepalive from server");
-                                    if let Err(e) = self.inbound_tx.send(Frame::KeepAlive(keepalive)).await {
-                                        tracing::error!("Failed to forward keepalive: {}", e);
-                                        break;
-                                    }
-                                }
-                                Frame::Data(data) => {
-                                    if let Err(e) =  self.inbound_tx.send(Frame::Data(data)).await {
-                                        tracing::error!("server => device inbound: {}", e);
-                                        break;
-                                    }
-                                }
-                                _ => {}
-                            }
-                            tracing::debug!("handle frame cost {}", beg.elapsed().as_millis());
-                        }
-                        Err(e) => {
-                            tracing::error!("Read error: {}", e);
-                            break;
-                        }
+                    if let ControlFlow::Break(_) = self.read_frame(&mut keepalive_wait, &mut last_active, result).await {
+                        break;
                     }
                 }
                 // outbound
@@ -160,6 +119,90 @@ impl RelayClient {
         tracing::debug!("client disconnected");
         let _ = conn.close().await;
         Ok(())
+    }
+
+    async fn read_frame(
+        &mut self,
+        keepalive_wait: &mut u8,
+        last_active: &mut Instant,
+        result: anyhow::Result<Frame>,
+    ) -> ControlFlow<()> {
+        *last_active = Instant::now();
+        match result {
+            Ok(frame) => {
+                tracing::debug!("received frame {}", frame);
+                let beg = Instant::now();
+                match frame {
+                    Frame::KeepAlive(keepalive) => {
+                        *keepalive_wait = keepalive_wait.saturating_sub(1);
+
+                        tracing::debug!("Received keepalive from server");
+                        if let Err(e) = self.inbound_tx.send(Frame::KeepAlive(keepalive)).await {
+                            tracing::error!("Failed to forward keepalive: {}", e);
+                            return ControlFlow::Break(());
+                        }
+                    }
+                    Frame::Data(data) => {
+                        if let Err(e) = self.inbound_tx.send(Frame::Data(data)).await {
+                            tracing::error!("server => device inbound: {}", e);
+                            return ControlFlow::Break(());
+                        }
+                    }
+                    _ => {}
+                }
+                tracing::debug!("handle frame cost {}", beg.elapsed().as_millis());
+            }
+            Err(e) => {
+                tracing::error!("Read error: {}", e);
+                return ControlFlow::Break(());
+            }
+        }
+        ControlFlow::Continue(())
+    }
+
+    async fn keep_alive(
+        &mut self,
+        conn: &mut Box<dyn ConnManage + 'static>,
+        keepalive_wait: &mut u8,
+        current_ipv6: &str,
+        port: u16,
+        stun: Option<&StunAddr>,
+        last_active: Instant,
+        timeout_secs: u64,
+    ) -> ControlFlow<()> {
+        if last_active.elapsed().as_secs() > timeout_secs {
+            tracing::warn!("keepalive threshold {:?} exceeded", last_active.elapsed());
+            return ControlFlow::Break(());
+        }
+        tracing::debug!("sending keepalive frame");
+        let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
+            name: "".to_string(),
+            identity: self.cfg.identity.clone(),
+            ipv6: current_ipv6.to_string(),
+            port,
+            #[allow(clippy::unwrap_or_default)]
+            stun_ip: stun
+                .as_ref()
+                .map(|stun| stun.ip.clone())
+                .unwrap_or(String::new()),
+            stun_port: stun.as_ref().map(|stun| stun.port).unwrap_or(0),
+            peer_details: vec![], // Client doesn't need to send peer info
+        });
+
+        match conn.write_frame(keepalive_frame).await {
+            Ok(_) => {
+                *keepalive_wait = 0;
+            }
+            Err(e) => {
+                tracing::error!("Failed to send keepalive: {}", e);
+                *keepalive_wait += 1;
+                if *keepalive_wait > self.cfg.keep_alive_thresh {
+                    tracing::error!("keepalive max retry, close connection");
+                    return ControlFlow::Break(());
+                }
+            }
+        }
+        ControlFlow::Continue(())
     }
 
     async fn connect(&self) -> anyhow::Result<Box<dyn ConnManage>> {
@@ -272,39 +315,7 @@ impl RelayHandler {
 
         tokio::spawn(async move {
             loop {
-                let mut conn = match client.connect().await {
-                    Ok(socket) => socket,
-                    Err(e) => {
-                        tracing::error!("connect error: {}", e);
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                        continue;
-                    }
-                };
-
-                let frame = match client.handshake(&mut conn).await {
-                    Ok(frame) => frame,
-                    Err(e) => {
-                        tracing::warn!("handshake fail {:?}, reconnecting", e);
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                        continue;
-                    }
-                };
-
-                tracing::info!("Handshake complete with {} peers", frame.peer_details.len());
-
-                // Store handshake reply in handler
-                {
-                    let mut guard = handshake_reply.write().await;
-                    *guard = Some(frame.clone());
-                }
-
-                if let Err(e) = on_ready.send(frame.clone()).await {
-                    tracing::error!("on ready send fail: {}", e);
-                }
-
-                let result = client.run(conn).await;
-
-                tracing::warn!("run client fail {:?}, reconnecting", result);
+                run_client_session(&on_ready, &mut client, &handshake_reply).await;
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
         });
@@ -343,6 +354,44 @@ impl RelayHandler {
     pub fn get_status(&self) -> RelayStatus {
         self.metrics.clone()
     }
+}
+
+async fn run_client_session(
+    on_ready: &mpsc::Sender<HandshakeReplyFrame>,
+    client: &mut RelayClient,
+    handshake_reply: &Arc<RwLock<Option<HandshakeReplyFrame>>>,
+) {
+    let mut conn = match client.connect().await {
+        Ok(socket) => socket,
+        Err(e) => {
+            tracing::error!("connect error: {}", e);
+            return;
+        }
+    };
+
+    let frame = match client.handshake(&mut conn).await {
+        Ok(frame) => frame,
+        Err(e) => {
+            tracing::warn!("handshake fail {:?}, reconnecting", e);
+            return;
+        }
+    };
+
+    tracing::info!("Handshake complete with {} peers", frame.peer_details.len());
+
+    // Store handshake reply in handler
+    {
+        let mut guard = handshake_reply.write().await;
+        *guard = Some(frame.clone());
+    }
+
+    if let Err(e) = on_ready.send(frame.clone()).await {
+        tracing::error!("on ready send fail: {}", e);
+    }
+
+    let result = client.run(conn).await;
+
+    tracing::warn!("run client fail {:?}, reconnecting", result);
 }
 
 pub async fn new_relay_handler(

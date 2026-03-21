@@ -152,12 +152,9 @@ async fn run_event_loop(
 
     tokio::spawn(async move {
         loop {
-            tokio::select! {
-                packet = dev_inbound.recv() => {
-                     if let Some(packet) = packet {
-                        handle_device_packet(relay_outbound.clone(), p2p_for_spawn.clone(), packet).await;
-                    }
-                }
+            let packet = dev_inbound.recv().await;
+            if let Some(packet) = packet {
+                handle_device_packet(relay_outbound.clone(), p2p_for_spawn.clone(), packet).await;
             }
         }
     });

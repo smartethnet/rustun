@@ -97,21 +97,19 @@ impl Listener for TCPListener {
         self.listener = Some(listener);
 
         loop {
-            tokio::select! {
-                socket = self.accept() => {
-                    match socket {
-                        Ok(socket) => {
-                            let conn = TcpConnection::new(socket, self.block.clone());
-                            if let Some(tx) = &self.on_conn_tx
-                                && let Err(e) = tx.send(Box::new(conn)).await {
-                                tracing::warn!("Failed to send new connection: {}", e);
-                            }
-                        },
-                        Err(e) => {
-                            tracing::error!("Accept error: {}", e);
-                            return Err(e);
-                        }
-                    };
+            let socket = self.accept().await;
+            match socket {
+                Ok(socket) => {
+                    let conn = TcpConnection::new(socket, self.block.clone());
+                    if let Some(tx) = &self.on_conn_tx
+                        && let Err(e) = tx.send(Box::new(conn)).await
+                    {
+                        tracing::warn!("Failed to send new connection: {}", e);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Accept error: {}", e);
+                    return Err(e);
                 }
             }
         }

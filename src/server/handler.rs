@@ -1,5 +1,7 @@
 use crate::codec::frame::Frame::HandshakeReply;
-use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerDetail};
+use crate::codec::frame::{
+    DataFrame, Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerDetail,
+};
 use crate::crypto::Block;
 use crate::network::ConnectionMeta;
 use crate::network::connection_manager::ConnectionManager;
@@ -69,12 +71,9 @@ impl Server {
         });
 
         loop {
-            tokio::select! {
-                conn = on_conn_rx.recv() => {
-                    if let Some(conn) = conn {
-                        let _ = self.handle_conn(conn);
-                    }
-                }
+            let conn = on_conn_rx.recv().await;
+            if let Some(conn) = conn {
+                let _ = self.handle_conn(conn);
             }
         }
     }
@@ -261,90 +260,97 @@ impl Handler {
     async fn handle_frame(&mut self, frame: Frame) {
         match frame {
             Frame::KeepAlive(frame) => {
-                tracing::info!(
-                    "on keepalive from {} {}:{} {}:{}",
-                    frame.identity,
-                    frame.ipv6,
-                    frame.port,
-                    frame.stun_ip,
-                    frame.stun_port
-                );
-
-                let client = self.client_manager.get_client(&frame.identity);
-                let mut name = String::new();
-                if let Some(client) = client {
-                    let stun = StunAddr {
-                        ip: frame.stun_ip.clone(),
-                        port: frame.stun_port,
-                    };
-                    let _ = self.connection_manager.update_connection_info(
-                        &client.cluster,
-                        &frame.identity,
-                        client.ciders.clone(),
-                        frame.ipv6.clone(),
-                        frame.port,
-                        stun,
-                    );
-                    name = client.name.clone();
-                }
-
-                // Reply keepalive with full peer details for route sync
-                let peer_details = if let Some(cluster) = &self.cluster {
-                    self.build_others(cluster, &frame.identity)
-                } else {
-                    vec![]
-                };
-
-                let reply_frame = Frame::KeepAlive(KeepAliveFrame {
-                    name: name.clone(),
-                    identity: frame.identity,
-                    ipv6: frame.ipv6,
-                    port: frame.port,
-                    stun_ip: frame.stun_ip,
-                    stun_port: frame.stun_port,
-                    peer_details,
-                });
-
-                if let Err(e) = self.outbound_tx.send(reply_frame).await {
-                    tracing::error!("reply keepalive frame failed with {:?}", e);
-                }
+                self.handle_keepalive_frame(frame).await;
             }
 
             Frame::Data(frame) => {
-                if frame.invalid() {
-                    tracing::warn!("receive invalid ip packet");
-                    return;
-                }
-
-                if frame.version() != 4 {
-                    tracing::warn!("receive invalid ipv4 packet");
-                    return;
-                }
-                tracing::debug!("on data: {} => {}", frame.src(), frame.dst());
-
-                // route within cluster (tenant isolation)
-                let dst_ip = frame.dst();
-                let cluster = match &self.cluster {
-                    Some(c) => c,
-                    None => {
-                        tracing::error!("cluster not set");
-                        return;
-                    }
-                };
-
-                let dst_client = self.connection_manager.get_connection(cluster, &dst_ip);
-                if let Some(dst_client) = dst_client {
-                    let result = dst_client.outbound_tx.send(Frame::Data(frame)).await;
-                    if result.is_err() {
-                        tracing::warn!("dst client {} not online", dst_ip);
-                    }
-                } else {
-                    tracing::warn!("no route to {} in cluster {}", dst_ip, cluster);
-                }
+                self.handle_data_frame(frame).await;
             }
             _ => {
                 tracing::warn!("unknown frame: {:?}", frame);
             }
+        }
+    }
+
+    async fn handle_data_frame(&mut self, frame: DataFrame) {
+        if frame.invalid() {
+            tracing::warn!("receive invalid ip packet");
+            return;
+        }
+        if frame.version() != 4 {
+            tracing::warn!("receive invalid ipv4 packet");
+            return;
+        }
+        tracing::debug!("on data: {} => {}", frame.src(), frame.dst());
+        let dst_ip = frame.dst();
+        let cluster = match &self.cluster {
+            Some(c) => c,
+            None => {
+                tracing::error!("cluster not set");
+                return;
+            }
+        };
+        let dst_client = self.connection_manager.get_connection(cluster, &dst_ip);
+
+        // route within cluster (tenant isolation)
+
+        if let Some(dst_client) = dst_client {
+            let result = dst_client.outbound_tx.send(Frame::Data(frame)).await;
+            if result.is_err() {
+                tracing::warn!("dst client {} not online", dst_ip);
+            }
+        } else {
+            tracing::warn!("no route to {} in cluster {}", dst_ip, cluster);
+        }
+    }
+
+    async fn handle_keepalive_frame(&mut self, frame: KeepAliveFrame) {
+        tracing::info!(
+            "on keepalive from {} {}:{} {}:{}",
+            frame.identity,
+            frame.ipv6,
+            frame.port,
+            frame.stun_ip,
+            frame.stun_port
+        );
+
+        let client = self.client_manager.get_client(&frame.identity);
+        let mut name = String::new();
+        if let Some(client) = client {
+            let stun = StunAddr {
+                ip: frame.stun_ip.clone(),
+                port: frame.stun_port,
+            };
+            let _ = self.connection_manager.update_connection_info(
+                &client.cluster,
+                &frame.identity,
+                client.ciders.clone(),
+                frame.ipv6.clone(),
+                frame.port,
+                stun,
+            );
+            name = client.name.clone();
+        }
+
+        // Reply keepalive with full peer details for route sync
+        let peer_details = if let Some(cluster) = &self.cluster {
+            self.build_others(cluster, &frame.identity)
+        } else {
+            vec![]
+        };
+
+        let reply_frame = Frame::KeepAlive(KeepAliveFrame {
+            name: name.clone(),
+            identity: frame.identity,
+            ipv6: frame.ipv6,
+            port: frame.port,
+            stun_ip: frame.stun_ip,
+            stun_port: frame.stun_port,
+            peer_details,
+        });
+
+        if let Err(e) = self.outbound_tx.send(reply_frame).await {
+            tracing::error!("reply keepalive frame failed with {:?}", e);
         }
     }
 }

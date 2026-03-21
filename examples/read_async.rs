@@ -43,10 +43,7 @@ async fn main_entry() -> Result<(), BoxError> {
     let size = dev.mtu()? as usize + tun::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];
     loop {
-        tokio::select! {
-            len = dev.read(&mut buf) => {
-                println!("pkt: {:?}", &buf[..len?]);
-            }
-        };
+        let len = dev.read(&mut buf).await?;
+        println!("pkt: {:?}", &buf[..len]);
     }
 }
