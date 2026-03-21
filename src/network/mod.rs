@@ -7,6 +7,7 @@ use crate::crypto::Block;
 use crate::network::ListenerConfig::TCP;
 use crate::network::tcp_connection::TcpConnection;
 use crate::network::tcp_listener::TCPListener;
+use crate::utils::StunAddr;
 use async_trait::async_trait;
 use ipnet::IpNet;
 use std::fmt::Display;
@@ -95,12 +96,9 @@ pub struct ConnectionMeta {
     pub ciders: Vec<String>,
     /// Channel for sending outbound frames to this client
     pub(crate) outbound_tx: mpsc::Sender<Frame>,
-    /// ipv6
     pub ipv6: String,
     pub port: u16,
-    // hole punch address
-    pub stun_ip: String,
-    pub stun_port: u16,
+    pub stun: Option<StunAddr>,
     pub last_active: u64,
 }
 

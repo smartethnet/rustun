@@ -235,7 +235,7 @@ impl StunClient {
         
         // Step 2: Detect NAT type
         // For now, use a simplified detection based on address comparison
-        let nat_type = self.detect_nat_type_simple(local_addr.clone(), public_ip, public_port).await;
+        let nat_type = self.detect_nat_type_simple(local_addr, public_ip, public_port).await;
         
         tracing::info!(
             "NAT type detected: {:?} ({})",

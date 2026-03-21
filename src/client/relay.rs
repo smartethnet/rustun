@@ -3,8 +3,8 @@ use crate::client::http::SelfInfo;
 use crate::client::prettylog::log_handshake_success;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
-use crate::network::{ConnectionConfig, ConnManage, TCPConnectionConfig, create_connection};
-use crate::utils;
+use crate::network::{ConnManage, ConnectionConfig, TCPConnectionConfig, create_connection};
+use crate::utils::{self, StunAddr};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{RwLock, mpsc};
@@ -22,8 +22,7 @@ pub struct RelayClientConfig {
     pub identity: String,
     pub ipv6: String,
     pub port: u16,
-    pub stun_ip: String,
-    pub stun_port: u16,
+    pub stun: Option<StunAddr>,
 }
 
 pub struct RelayClient {
@@ -58,8 +57,7 @@ impl RelayClient {
 
         let mut current_ipv6 = self.cfg.ipv6.clone();
         let port = self.cfg.port;
-        let stun_ip = self.cfg.stun_ip.clone();
-        let stun_port = self.cfg.stun_port;
+        let stun = self.cfg.stun.clone();
 
         let mut last_active = Instant::now();
         let timeout_secs =
@@ -78,8 +76,9 @@ impl RelayClient {
                         identity: self.cfg.identity.clone(),
                         ipv6: current_ipv6.clone(),
                         port,
-                        stun_ip: stun_ip.clone(),
-                        stun_port,
+                        #[allow(clippy::unwrap_or_default)]
+                        stun_ip: stun.as_ref().map(|stun| stun.ip.clone()).unwrap_or(String::new()),
+                        stun_port: stun.as_ref().map(|stun| stun.port).unwrap_or(0),
                         peer_details: vec![], // Client doesn't need to send peer info
                     });
                     match conn.write_frame(keepalive_frame).await {
@@ -195,23 +194,12 @@ impl RelayClient {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RelayStatus {
     pub rx_error: u64,
     pub rx_frame: u64,
     pub tx_frame: u64,
     pub tx_error: u64,
-}
-
-impl Default for RelayStatus {
-    fn default() -> Self {
-        Self {
-            rx_error: 0,
-            tx_error: 0,
-            rx_frame: 0,
-            tx_frame: 0,
-        }
-    }
 }
 
 pub struct RelayHandler {
@@ -251,8 +239,12 @@ impl RelayHandler {
                 ciders: reply.ciders.clone(),
                 ipv6: cfg.ipv6.clone(),
                 port: cfg.port,
-                stun_ip: cfg.stun_ip.clone(),
-                stun_port: cfg.stun_port,
+                stun_ip: cfg
+                    .stun
+                    .as_ref()
+                    .map(|stun| stun.ip.clone())
+                    .unwrap_or(String::new()),
+                stun_port: cfg.stun.as_ref().map(|stun| stun.port).unwrap_or(0),
             }),
             _ => None,
         }
@@ -358,8 +350,7 @@ pub async fn new_relay_handler(
     block: Arc<Box<dyn Block>>,
     ipv6: String,
     port: u16,
-    stun_ip: String,
-    stun_port: u16,
+    stun: Option<StunAddr>,
 ) -> crate::Result<(RelayHandler, HandshakeReplyFrame)> {
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
@@ -369,8 +360,7 @@ pub async fn new_relay_handler(
         identity: args.identity.clone(),
         ipv6,
         port,
-        stun_ip,
-        stun_port,
+        stun,
     };
 
     let mut handler = RelayHandler::new(block);

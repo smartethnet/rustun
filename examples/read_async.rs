@@ -12,10 +12,8 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use std::thread::{sleep, Builder};
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
-use tokio_util::sync::CancellationToken;
 use tun::{AbstractDevice, BoxError};
 
 #[tokio::main]
@@ -51,5 +49,4 @@ async fn main_entry() -> Result<(), BoxError> {
             }
         };
     }
-    Ok(())
 }

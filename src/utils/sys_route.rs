@@ -49,12 +49,10 @@ impl SysRoute {
         match output {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                Err(format!(
-                    "iptables command not found. The --masq option requires iptables.\n\
+                Err("iptables command not found. The --masq option requires iptables.\n\
                     Please either:\n\
                     1. Install iptables: sudo apt-get install iptables (Debian/Ubuntu) or sudo yum install iptables (RHEL/CentOS)\n\
-                    2. Run without --masq option"
-                ).into())
+                    2. Run without --masq option".to_string().into())
             }
             Err(e) => Err(format!("Failed to check iptables: {}", e).into()),
         }
@@ -443,11 +441,9 @@ impl SysRoute {
             .output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    format!(
-                        "iptables command not found. CIDR mapping requires iptables with NETMAP support.\n\
+                    "iptables command not found. CIDR mapping requires iptables with NETMAP support.\n\
                         Please install iptables and ensure your kernel supports NETMAP target.\n\
-                        NETMAP requires Linux kernel 2.6.32+ with netfilter NETMAP module."
-                    )
+                        NETMAP requires Linux kernel 2.6.32+ with netfilter NETMAP module.".to_string()
                 } else {
                     format!("Failed to execute iptables command: {}", e)
                 }

@@ -4,11 +4,12 @@
 //! of VPN protocol frames. It manages the frame header format, payload encryption/decryption,
 //! and JSON serialization of frame data.
 
+use crate::codec::errors::FrameError;
 use crate::codec::frame::*;
 use crate::crypto::Block;
 use anyhow::Context;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 /// Protocol magic number for frame validation
 const MAGIC: u32 = 0x91929394;
@@ -30,7 +31,7 @@ impl Parser {
     /// # Returns
     /// * `Ok((Frame, usize))` - Parsed frame and total bytes consumed
     /// * `Err` - If frame is invalid, too short, or decryption/parsing fails
-    pub fn unmarshal(buf: &[u8], block: &Box<dyn Block>) -> crate::Result<(Frame, usize)> {
+    pub fn unmarshal(buf: &[u8], block: &dyn Block) -> crate::Result<(Frame, usize)> {
         if buf.len() < HDR_LEN {
             return Err(FrameError::TooShort.into());
         }
@@ -41,7 +42,13 @@ impl Parser {
         let payload_size = u16::from_be_bytes([buf[6], buf[7]]);
 
         if !Self::validate(magic, version, payload_size, buf) {
-            tracing::debug!("validate header fail: magic = {} version={} payload_size={} buf size={}", magic, version, payload_size, buf.len());
+            tracing::debug!(
+                "validate header fail: magic = {} version={} payload_size={} buf size={}",
+                magic,
+                version,
+                payload_size,
+                buf.len()
+            );
             return Err(FrameError::Invalid.into());
         }
 
@@ -115,7 +122,7 @@ impl Parser {
     /// Deserialized frame data of type T
     fn decrypt_and_deserialize<T: DeserializeOwned>(
         payload: &mut Vec<u8>,
-        block: &Box<dyn Block>,
+        block: &dyn Block,
     ) -> crate::Result<T> {
         block
             .decrypt(payload)
@@ -137,7 +144,7 @@ impl Parser {
     /// Encrypted payload bytes
     fn serialize_and_encrypt<T: Serialize>(
         data: &T,
-        block: &Box<dyn Block>,
+        block: &dyn Block,
         context_msg: &str,
     ) -> crate::Result<Vec<u8>> {
         let msg = context_msg.to_string();
@@ -178,7 +185,7 @@ impl Parser {
     /// # Returns
     /// * `Ok(Vec<u8>)` - Complete frame bytes (header + encrypted payload)
     /// * `Err` - If serialization or encryption fails
-    pub fn marshal(frame: Frame, block: &Box<dyn Block>) -> crate::Result<Vec<u8>> {
+    pub fn marshal(frame: Frame, block: &dyn Block) -> crate::Result<Vec<u8>> {
         match frame {
             Frame::Handshake(hs) => {
                 let payload =
@@ -200,11 +207,8 @@ impl Parser {
             }
 
             Frame::KeepAlive(keepalive) => {
-                let payload = Self::serialize_and_encrypt(
-                    &keepalive,
-                    block,
-                    "failed to marshal keepalive",
-                )?;
+                let payload =
+                    Self::serialize_and_encrypt(&keepalive, block, "failed to marshal keepalive")?;
                 let mut buf = Self::build_header(FrameType::KeepAlive, payload.len() as u16);
                 buf.extend_from_slice(&payload);
                 Ok(buf)
@@ -218,11 +222,8 @@ impl Parser {
             }
 
             Frame::ProbeIPv6(frame) => {
-                let payload = Self::serialize_and_encrypt(
-                    &frame,
-                    block,
-                    "failed to marshal probe ipv6",
-                )?;
+                let payload =
+                    Self::serialize_and_encrypt(&frame, block, "failed to marshal probe ipv6")?;
                 let mut buf = Self::build_header(FrameType::ProbeIPv6, payload.len() as u16);
                 buf.extend_from_slice(&payload);
                 Ok(buf)

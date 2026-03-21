@@ -1,15 +1,16 @@
-
+use crate::client::p2p::udp_server::UDPServer;
+use crate::client::p2p::{
+    CONNECTION_TIMEOUT, KEEPALIVE_INTERVAL, OUTBOUND_BUFFER_SIZE, PeerMeta, PeerStatus,
+};
+use crate::client::{P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
+use crate::codec::frame::{Frame, PeerDetail, ProbeHolePunchFrame, ProbeIPv6Frame};
+use crate::codec::parser::Parser;
+use crate::crypto::Block;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock};
-use crate::client::{P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
-use crate::client::p2p::{PeerMeta, PeerStatus, CONNECTION_TIMEOUT, KEEPALIVE_INTERVAL, OUTBOUND_BUFFER_SIZE};
-use crate::client::p2p::udp_server::UDPServer;
-use crate::codec::frame::{Frame, ProbeHolePunchFrame, ProbeIPv6Frame, PeerDetail};
-use crate::codec::parser::Parser;
-use crate::crypto::Block;
+use tokio::sync::{RwLock, mpsc};
 
 pub struct PeerHandler {
     /// Map of peer identity to peer metadata (shared with keepalive task)
@@ -48,8 +49,7 @@ enum SendResult {
 }
 
 impl PeerHandler {
-    pub fn new(block: Arc<Box<dyn Block>>,
-               identity: String) -> Self {
+    pub fn new(block: Arc<Box<dyn Block>>, identity: String) -> Self {
         Self {
             peers: Arc::new(RwLock::new(HashMap::new())),
             outbound_tx: None,
@@ -62,11 +62,10 @@ impl PeerHandler {
     }
 
     /// run peer service listen udp socket for p2p
-    pub fn run_peer_service(&mut self)  {
+    pub fn run_peer_service(&mut self) {
         let (output_tx, output_rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
         let (inbound_tx, inbound_rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
-        let mut udp_server = UDPServer::new(self.port, self.stun_port,
-                                              inbound_tx, output_rx);
+        let mut udp_server = UDPServer::new(self.port, self.stun_port, inbound_tx, output_rx);
 
         tokio::spawn(async move {
             if let Err(e) = udp_server.serve().await {
@@ -113,7 +112,12 @@ impl PeerHandler {
             false, // is_ipv4
         );
         if stun_remote.is_some() {
-            tracing::info!("Added Hole Punch peer: {} at {}:{}", p.identity, p.ipv6, p.port);
+            tracing::info!(
+                "Added Hole Punch peer: {} at {}:{}",
+                p.identity,
+                p.ipv6,
+                p.port
+            );
         }
 
         // Add or update peer in the map
@@ -193,7 +197,12 @@ impl PeerHandler {
                         true, // is_ipv6
                     );
                     if ipv6_remote.is_some() {
-                        tracing::info!("Added IPv6 peer: {} at {}:{}", peer.identity, peer.ipv6, peer.port);
+                        tracing::info!(
+                            "Added IPv6 peer: {} at {}:{}",
+                            peer.identity,
+                            peer.ipv6,
+                            peer.port
+                        );
                     }
 
                     let stun_remote = self.parse_address(
@@ -203,7 +212,12 @@ impl PeerHandler {
                         false, // is_ipv4
                     );
                     if stun_remote.is_some() {
-                        tracing::info!("Added Hole Punch peer: {} at {}:{}", peer.identity, peer.ipv6, peer.port);
+                        tracing::info!(
+                            "Added Hole Punch peer: {} at {}:{}",
+                            peer.identity,
+                            peer.ipv6,
+                            peer.port
+                        );
                     }
 
                     // Add or update peer in the map
@@ -224,7 +238,6 @@ impl PeerHandler {
                     );
                 }
             }
-
         }
     }
 
@@ -240,7 +253,12 @@ impl PeerHandler {
             Ok(addr) => addr,
             Err(e) => {
                 let protocol = if is_ipv6 { "IPv6" } else { "STUN" };
-                tracing::warn!("Invalid new {} address for peer {}: {}", protocol, peer.identity, e);
+                tracing::warn!(
+                    "Invalid new {} address for peer {}: {}",
+                    protocol,
+                    peer.identity,
+                    e
+                );
                 return;
             }
         };
@@ -256,7 +274,9 @@ impl PeerHandler {
                 "Update {} address for peer {}: {} -> {}",
                 protocol,
                 peer.identity,
-                old_addr.map(|a| a.to_string()).unwrap_or_else(|| "None".to_string()),
+                old_addr
+                    .map(|a| a.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
                 new_addr
             );
 
@@ -278,19 +298,26 @@ impl PeerHandler {
     /// - update last_active, this is for p2p send_frame healthy checker
     /// - remote address, most of the time this is not changed.
     pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
-        let inbound_rx = self.inbound_rx.as_mut().ok_or("inbound_rx not initialized")?;
-        
+        let inbound_rx = self
+            .inbound_rx
+            .as_mut()
+            .ok_or("inbound_rx not initialized")?;
+
         loop {
             let (buf, remote) = inbound_rx
                 .recv()
                 .await
                 .ok_or("recv from peers channel closed")?;
 
-            let (frame, _) = Parser::unmarshal(&buf, self.block.as_ref())?;
+            let (frame, _) = Parser::unmarshal(&buf, self.block.as_ref().as_ref())?;
 
             match frame {
                 Frame::ProbeIPv6(probe) => {
-                    tracing::info!("Received probe ipv6 from peer {} at {}", probe.identity, remote);
+                    tracing::info!(
+                        "Received probe ipv6 from peer {} at {}",
+                        probe.identity,
+                        remote
+                    );
 
                     let mut peers = self.peers.write().await;
                     if let Some(peer) = peers.get_mut(&probe.identity) {
@@ -299,7 +326,11 @@ impl PeerHandler {
                     }
                 }
                 Frame::ProbeHolePunch(probe) => {
-                    tracing::info!("Received probe hole punch from peer {} at {}", probe.identity, remote);
+                    tracing::info!(
+                        "Received probe hole punch from peer {} at {}",
+                        probe.identity,
+                        remote
+                    );
                     let mut peers = self.peers.write().await;
                     if let Some(peer) = peers.get_mut(&probe.identity) {
                         peer.stun_addr = Some(remote);
@@ -322,11 +353,16 @@ impl PeerHandler {
     ///
     pub async fn send_frame(&self, frame: Frame, dest_ip: &str) -> crate::Result<()> {
         let peers = self.peers.read().await;
-        let peer = self.find_peer_by_ip_locked(&peers, dest_ip)
+        let peer = self
+            .find_peer_by_ip_locked(&peers, dest_ip)
             .ok_or("No peer found for destination")?;
 
         if peer.remote_addr.is_none() && peer.stun_addr.is_none() {
-            return Err(format!("Peer {} has no available address (IPv6 or STUN)", peer.identity).into());
+            return Err(format!(
+                "Peer {} has no available address (IPv6 or STUN)",
+                peer.identity
+            )
+            .into());
         }
 
         let peer_identity = peer.identity.clone();
@@ -338,23 +374,30 @@ impl PeerHandler {
         drop(peers);
 
         // Marshal frame once for potential multiple attempts
-        let data = Parser::marshal(frame, self.block.as_ref())?;
-        let outbound_tx = self.outbound_tx.as_ref().ok_or("outbound_tx not initialized")?;
+        let data = Parser::marshal(frame, self.block.as_ref().as_ref())?;
+        let outbound_tx = self
+            .outbound_tx
+            .as_ref()
+            .ok_or("outbound_tx not initialized")?;
 
         // Attempt 1: Try IPv6 direct connection
-        match self.try_send_via(
-            outbound_tx,
-            &data,
-            remote_addr,
-            ipv6_last_active,
-            &peer_identity,
-            "IPv6"
-        ).await {
+        match self
+            .try_send_via(
+                outbound_tx,
+                &data,
+                remote_addr,
+                ipv6_last_active,
+                &peer_identity,
+                "IPv6",
+            )
+            .await
+        {
             SendResult::Success => return Ok(()),
             SendResult::Expired(elapsed) => {
                 tracing::debug!(
                     "IPv6 connection to {} expired ({:?} ago), trying STUN",
-                    peer_identity, elapsed
+                    peer_identity,
+                    elapsed
                 );
             }
             SendResult::NeverResponded => {
@@ -366,21 +409,23 @@ impl PeerHandler {
         }
 
         // Attempt 2: Try STUN address
-        match self.try_send_via(
-            outbound_tx,
-            &data,
-            stun_addr,
-            stun_last_active,
-            &peer_identity,
-            "STUN"
-        ).await {
+        match self
+            .try_send_via(
+                outbound_tx,
+                &data,
+                stun_addr,
+                stun_last_active,
+                &peer_identity,
+                "STUN",
+            )
+            .await
+        {
             SendResult::Success => Ok(()),
-            SendResult::Expired(elapsed) => {
-                Err(format!(
-                    "Peer {} STUN connection also expired ({:?} ago)",
-                    peer_identity, elapsed
-                ).into())
-            }
+            SendResult::Expired(elapsed) => Err(format!(
+                "Peer {} STUN connection also expired ({:?} ago)",
+                peer_identity, elapsed
+            )
+            .into()),
             SendResult::NeverResponded => {
                 Err(format!("Peer {} STUN address never responded", peer_identity).into())
             }
@@ -389,7 +434,8 @@ impl PeerHandler {
                 Err(format!(
                     "Failed to send to peer {}: IPv6 unavailable/expired, STUN unavailable/expired",
                     peer_identity
-                ).into())
+                )
+                .into())
             }
         }
     }
@@ -423,7 +469,12 @@ impl PeerHandler {
         // Connection is valid, send the packet
         match outbound_tx.send((data.to_vec(), addr)).await {
             Ok(_) => {
-                tracing::debug!("Sent frame to peer {} via {}: {}", peer_identity, protocol, addr);
+                tracing::debug!(
+                    "Sent frame to peer {} via {}: {}",
+                    peer_identity,
+                    protocol,
+                    addr
+                );
                 SendResult::Success
             }
             Err(e) => {
@@ -455,7 +506,8 @@ impl PeerHandler {
             // Check if destination falls within peer's CIDR ranges
             for cidr in &peer.ciders {
                 if let Ok(network) = cidr.parse::<IpNet>()
-                    && network.contains(&dest_ip_addr) {
+                    && network.contains(&dest_ip_addr)
+                {
                     return Some(peer);
                 }
             }
@@ -466,27 +518,27 @@ impl PeerHandler {
 
     async fn update_peer_active(&mut self, remote_addr: SocketAddr) {
         let mut peers = self.peers.write().await;
-        
+
         for peer in peers.values_mut() {
             // Check if this is from IPv6 address
-            if let Some(ipv6_addr) = peer.remote_addr {
-                if ipv6_addr == remote_addr {
-                    peer.last_active = Some(Instant::now());
-                    tracing::debug!("Updated IPv6 last_active for peer: {}", peer.identity);
-                    return;
-                }
+            if let Some(ipv6_addr) = peer.remote_addr
+                && ipv6_addr == remote_addr
+            {
+                peer.last_active = Some(Instant::now());
+                tracing::debug!("Updated IPv6 last_active for peer: {}", peer.identity);
+                return;
             }
-            
+
             // Check if this is from STUN address
-            if let Some(stun_addr) = peer.stun_addr {
-                if stun_addr == remote_addr {
-                    peer.stun_last_active = Some(Instant::now());
-                    tracing::debug!("Updated STUN last_active for peer: {}", peer.identity);
-                    return;
-                }
+            if let Some(stun_addr) = peer.stun_addr
+                && stun_addr == remote_addr
+            {
+                peer.stun_last_active = Some(Instant::now());
+                tracing::debug!("Updated STUN last_active for peer: {}", peer.identity);
+                return;
             }
         }
-        
+
         tracing::warn!("Received packet from unknown peer address: {}", remote_addr);
     }
 
@@ -534,7 +586,8 @@ impl PeerHandler {
                     &block,
                     &identity,
                     true, // is_ipv6
-                ).await;
+                )
+                .await;
 
                 // Send STUN hole punch probes
                 Self::send_probes(
@@ -543,7 +596,8 @@ impl PeerHandler {
                     &block,
                     &identity,
                     false, // is_ipv4/stun
-                ).await;
+                )
+                .await;
             }
         });
     }
@@ -559,13 +613,7 @@ impl PeerHandler {
             let peers_guard = peers.read().await;
             peers_guard
                 .values()
-                .filter_map(|p| {
-                    if is_ipv6 {
-                        p.remote_addr
-                    } else {
-                        p.stun_addr
-                    }
-                })
+                .filter_map(|p| if is_ipv6 { p.remote_addr } else { p.stun_addr })
                 .collect()
         };
 
@@ -586,7 +634,7 @@ impl PeerHandler {
         };
 
         // Marshal once, reuse for all peers
-        let probe_data = match Parser::marshal(probe_frame, block.as_ref()) {
+        let probe_data = match Parser::marshal(probe_frame, block.as_ref().as_ref()) {
             Ok(data) => data,
             Err(e) => {
                 let protocol = if is_ipv6 { "IPv6" } else { "STUN" };
@@ -599,11 +647,15 @@ impl PeerHandler {
         let protocol = if is_ipv6 { "IPv6" } else { "hole punch" };
         for remote_addr in peer_addrs {
             if let Err(e) = outbound_tx.send((probe_data.clone(), remote_addr)).await {
-                tracing::warn!("Failed to send {} probe to {}: {}", protocol, remote_addr, e);
+                tracing::warn!(
+                    "Failed to send {} probe to {}: {}",
+                    protocol,
+                    remote_addr,
+                    e
+                );
             } else {
                 tracing::info!("Sent {} probe to {}", protocol, remote_addr);
             }
         }
     }
-
 }

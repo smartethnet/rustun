@@ -197,8 +197,8 @@ impl DeviceHandler {
         };
 
         let result = inbound_rx.recv().await;
-        if result.is_some() {
-            self.rx_bytes += result.as_ref().unwrap().len();
+        if let Some(ref data) = result {
+            self.rx_bytes += data.len();
         }
         result
     }

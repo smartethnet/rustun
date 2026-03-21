@@ -5,12 +5,23 @@ use tracing_subscriber::EnvFilter;
 pub mod device;
 pub mod sys_route;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StunAddr {
+    pub ip: String,
+    pub port: u16,
+}
+impl std::fmt::Display for StunAddr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.ip, self.port)
+    }
+}
+
 pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
     // On Windows, disable ANSI colors to avoid garbage characters in console
     // On Unix systems, keep ANSI colors for better readability
     #[cfg(target_os = "windows")]
     let use_ansi = false;
-    
+
     #[cfg(not(target_os = "windows"))]
     let use_ansi = true;
 
@@ -21,7 +32,7 @@ pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
                     .with_default_directive(LevelFilter::INFO.into())
                     .from_env_lossy(),
             )
-            .with_ansi(use_ansi)  // Disable ANSI colors on Windows
+            .with_ansi(use_ansi) // Disable ANSI colors on Windows
             .with_line_number(true)
             .with_file(true)
             .finish(),

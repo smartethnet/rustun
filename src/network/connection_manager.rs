@@ -1,4 +1,4 @@
-use crate::network::ConnectionMeta;
+use crate::network::{ConnectionMeta, StunAddr};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -84,7 +84,11 @@ impl ConnectionManager {
         })
     }
 
-    pub fn get_connection_by_identity(&self, cluster: &str, identity: &String) -> Option<ConnectionMeta> {
+    pub fn get_connection_by_identity(
+        &self,
+        cluster: &str,
+        identity: &String,
+    ) -> Option<ConnectionMeta> {
         let guard = self
             .cluster_connections
             .read()
@@ -92,7 +96,7 @@ impl ConnectionManager {
         guard.get(cluster).and_then(|connections| {
             connections
                 .iter()
-                .find(|conn| conn.identity ==*identity)
+                .find(|conn| conn.identity == *identity)
                 .cloned()
         })
     }
@@ -105,17 +109,24 @@ impl ConnectionManager {
     /// # Returns
     /// * `Some(Vec<ConnectionMeta>)` - List of other connections in the cluster if the address changed
     /// * `None` - If the address didn't change or the connection wasn't found
-    pub fn update_connection_info(&self, cluster: &str, identity: &String,
-                                  ciders: Vec<String>,
-                                  ipv6: String, port: u16,
-                                  stun_ip: String, stun_port: u16) -> Option<Vec<ConnectionMeta>> {
+    pub fn update_connection_info(
+        &self,
+        cluster: &str,
+        identity: &String,
+        ciders: Vec<String>,
+        ipv6: String,
+        port: u16,
+        stun: StunAddr,
+    ) -> Option<Vec<ConnectionMeta>> {
         let mut cluster_map = self
             .cluster_connections
             .write()
             .unwrap_or_else(|e| e.into_inner());
 
         if let Some(connections) = cluster_map.get_mut(cluster)
-            && let Some(conn) = connections.iter_mut().find(|c| c.identity == *identity) {
+            && let Some(conn) = connections.iter_mut().find(|c| c.identity == *identity)
+        {
+            let prev_conn = conn.clone();
             // Always update last_active timestamp on keepalive
             conn.last_active = now_timestamp();
 
@@ -126,10 +137,13 @@ impl ConnectionManager {
                 changed = true;
             }
 
-            if conn.stun_ip!= stun_ip || conn.stun_port != stun_port {
+            let stun_changed = match conn.stun.as_ref() {
+                Some(conn_stun) => conn_stun != &stun,
+                None => true,
+            };
+            if stun_changed {
                 changed = true;
-                conn.stun_ip = stun_ip.clone();
-                conn.stun_port = stun_port;
+                conn.stun = Some(stun.clone());
             }
 
             if conn.ciders != ciders {
@@ -141,17 +155,16 @@ impl ConnectionManager {
                 return None;
             }
 
+            let prev_stun = match prev_conn.stun.as_ref() {
+                Some(conn_stun) => conn_stun.to_string(),
+                None => "None".to_string(),
+            };
             tracing::info!(
-                "Updated connection info for {}: {}:{} -> {}:{} stun: {}:{} -> {}:{}",
-                identity,
-                conn.ipv6,
-                conn.port,
+                "Updated connection info for {identity}: {}:{} -> {}:{} stun: {prev_stun} -> {stun}",
+                prev_conn.ipv6,
+                prev_conn.port,
                 ipv6,
                 port,
-                conn.stun_ip,
-                conn.stun_port,
-                stun_ip,
-                stun_port
             );
             // Return other connections in the cluster (excluding the updated one)
             let others: Vec<ConnectionMeta> = connections
@@ -161,13 +174,16 @@ impl ConnectionManager {
                 .collect();
             return Some(others);
         }
-        
+
         None
     }
 
     pub fn dump_connection_info(&self) -> Vec<ConnectionMeta> {
         let mut result = Vec::new();
-        let guard = self.cluster_connections.read().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .cluster_connections
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         for (_, connections) in guard.iter() {
             for conn in connections {
                 result.push(conn.clone());

@@ -102,7 +102,7 @@ impl TcpConnection {
     /// - `Ok(None)` - Incomplete data, need more bytes
     /// - `Err` - Parse error (invalid frame format)
     fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
-        let result = Parser::unmarshal(self.input_stream.as_ref(), self.block.as_ref());
+        let result = Parser::unmarshal(self.input_stream.as_ref(), self.block.as_ref().as_ref());
         match result {
             Ok((frame, total_len)) => {
                 self.input_stream.advance(total_len);
@@ -123,11 +123,10 @@ impl ConnRead for TcpConnection {
                 return Err("read timeout".into());
             }
 
-            if let Ok(frame) = self.parse_frame() {
-                if let Some(frame) = frame {
+            if let Ok(frame) = self.parse_frame()
+                && let Some(frame) = frame {
                     return Ok(frame);
                 }
-            }
 
             let remaining = deadline.saturating_duration_since(Instant::now());
 
@@ -155,7 +154,7 @@ impl ConnRead for TcpConnection {
 #[async_trait]
 impl ConnWrite for TcpConnection {
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()> {
-        let result = Parser::marshal(frame, self.block.as_ref());
+        let result = Parser::marshal(frame, self.block.as_ref().as_ref());
         let buf = match result {
             Ok(buf) => buf,
             Err(e) => {

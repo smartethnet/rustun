@@ -15,9 +15,9 @@
 //! - Type: Frame type identifier (1 byte)
 //! - Payload Length: Length of the payload in bytes (2 bytes, big-endian)
 
-use std::collections::HashMap;
-pub(crate) use crate::codec::errors::FrameError;
+use crate::codec::errors::FrameError;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Display;
 
 /// Frame type identifiers
@@ -99,13 +99,20 @@ impl Display for Frame {
         match self {
             Frame::Handshake(frame) => write!(f, "handshake with {}", frame.identity),
             Frame::HandshakeReply(frame) => {
-                write!(f, "handshake reply with {} peer_details", frame.peer_details.len())
+                write!(
+                    f,
+                    "handshake reply with {} peer_details",
+                    frame.peer_details.len()
+                )
             }
-            Frame::KeepAlive(frame) => write!(f, "keepalive, ipv6 {}:{} stun: {}:{}",
-                                              frame.ipv6, frame.port, frame.stun_ip, frame.stun_port),
+            Frame::KeepAlive(frame) => write!(
+                f,
+                "keepalive, ipv6 {}:{} stun: {}:{}",
+                frame.ipv6, frame.port, frame.stun_ip, frame.stun_port,
+            ),
             Frame::Data(frame) => write!(f, "data with payload size {}", frame.payload.len()),
-            Frame::ProbeIPv6(frame)=> write!(f, "{} probe ipv6", frame.identity),
-            Frame::ProbeHolePunch(frame)=>write!(f, "{} probe hole punch", frame.identity),
+            Frame::ProbeIPv6(frame) => write!(f, "{} probe ipv6", frame.identity),
+            Frame::ProbeHolePunch(frame) => write!(f, "{} probe hole punch", frame.identity),
         }
     }
 }
@@ -175,7 +182,7 @@ pub struct HandshakeReplyFrame {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PeerDetail {
     pub name: String,
-    
+
     /// Unique identifier of the peer
     pub identity: String,
 

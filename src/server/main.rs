@@ -1,11 +1,11 @@
+use crate::network::connection_manager::ConnectionManager;
 use crate::server::client_manager::ClientManager;
+use crate::server::conf_agent::ConfAgent;
 use crate::server::config;
-use crate::server::server::Server;
+use crate::server::config_watcher::ConfigWatcher;
+use crate::server::handler::Server;
 use crate::{crypto, utils};
 use std::sync::Arc;
-use crate::network::connection_manager::ConnectionManager;
-use crate::server::config_watcher::ConfigWatcher;
-use crate::server::conf_agent::ConfAgent;
 
 pub async fn run_server() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -28,10 +28,10 @@ pub async fn run_server() {
     watcher.reload();
 
     let block = crypto::new_block(&cfg.crypto_config);
-    
+
     // Create connection manager
     let connection_manager = Arc::new(ConnectionManager::new());
-    
+
     // Create conf-agent if configured
     if let Some(ref conf_agent_config) = cfg.conf_agent {
         let agent = Arc::new(ConfAgent::new(
@@ -40,7 +40,7 @@ pub async fn run_server() {
             connection_manager.clone(),
             routes_file.clone(),
         ));
-        
+
         // Start conf-agent background task
         let agent_clone = agent.clone();
         tokio::spawn(async move {
@@ -49,7 +49,7 @@ pub async fn run_server() {
             }
         });
     }
-    
+
     let mut server = Server::new(
         cfg.server_config.clone(),
         client_manager,

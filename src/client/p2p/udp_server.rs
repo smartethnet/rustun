@@ -138,17 +138,13 @@ impl UDPServer {
                 // Handle IPv6 inbound packets: Network -> PeerHandler
                 // Direct P2P connections or responses to our keepalives
                 result = socket_ipv6.recv_from(&mut buf_ipv6) => {
-                    if let Err(e) = self.handle_inbound(result, &mut buf_ipv6, "IPv6").await {
-                        return Err(e);
-                    }
+                    self.handle_inbound(result, &mut buf_ipv6, "IPv6").await?
                 }
 
                 // Handle IPv4 inbound packets: Network -> PeerHandler
                 // STUN-hole-punched connections or responses
                 result = socket_ipv4.recv_from(&mut buf_ipv4) => {
-                    if let Err(e) = self.handle_inbound(result, &mut buf_ipv4, "IPv4").await {
-                        return Err(e);
-                    }
+                    self.handle_inbound(result, &mut buf_ipv4, "IPv4").await?
                 }
             }
         }
@@ -223,7 +219,7 @@ impl UDPServer {
     async fn handle_inbound(
         &self,
         result: std::io::Result<(usize, SocketAddr)>,
-        buffer: &mut Vec<u8>,
+        buffer: &mut [u8],
         protocol: &str,
     ) -> crate::Result<()> {
         match result {

@@ -3,9 +3,10 @@ use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveF
 use crate::crypto::Block;
 use crate::network::ConnectionMeta;
 use crate::network::connection_manager::ConnectionManager;
-use crate::network::{ListenerConfig, ConnManage, TCPListenerConfig, create_listener};
+use crate::network::{ConnManage, ListenerConfig, TCPListenerConfig, create_listener};
 use crate::server::client_manager::ClientManager;
 use crate::server::config::ServerConfig;
+use crate::utils::StunAddr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
@@ -162,8 +163,7 @@ impl Handler {
             outbound_tx: self.outbound_tx.clone(),
             ipv6: "".to_string(), // Do not set, it will be set in the keepalive frame
             port: 0,
-            stun_ip: "".to_string(),
-            stun_port: 0,
+            stun: None,
             last_active: now_timestamp(),
         };
         tracing::debug!("handshake completed with {:?}", meta);
@@ -232,12 +232,12 @@ impl Handler {
         others
             .iter()
             .map(|client| {
-                let (ipv6, port, stun_ip, stun_port, last_active) = match self
+                let (ipv6, port, stun, last_active) = match self
                     .connection_manager
                     .get_connection_by_identity(cluster, &client.identity)
                 {
-                    Some(c) => (c.ipv6, c.port, c.stun_ip, c.stun_port, c.last_active),
-                    None => ("".to_string(), 0, "".to_string(), 0, 0),
+                    Some(c) => (c.ipv6, c.port, c.stun.clone(), c.last_active),
+                    None => ("".to_string(), 0, None, 0),
                 };
 
                 PeerDetail {
@@ -247,8 +247,11 @@ impl Handler {
                     ciders: client.ciders.clone(),
                     ipv6,
                     port,
-                    stun_ip,
-                    stun_port,
+                    stun_ip: stun
+                        .as_ref()
+                        .map(|stun| stun.ip.clone())
+                        .unwrap_or(String::new()),
+                    stun_port: stun.map(|stun| stun.port).unwrap_or(0),
                     last_active,
                 }
             })
@@ -270,14 +273,17 @@ impl Handler {
                 let client = self.client_manager.get_client(&frame.identity);
                 let mut name = String::new();
                 if let Some(client) = client {
+                    let stun = StunAddr {
+                        ip: frame.stun_ip.clone(),
+                        port: frame.stun_port,
+                    };
                     let _ = self.connection_manager.update_connection_info(
                         &client.cluster,
                         &frame.identity,
                         client.ciders.clone(),
                         frame.ipv6.clone(),
                         frame.port,
-                        frame.stun_ip.clone(),
-                        frame.stun_port,
+                        stun,
                     );
                     name = client.name.clone();
                 }

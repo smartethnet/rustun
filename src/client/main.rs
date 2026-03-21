@@ -1,18 +1,18 @@
-use clap::Parser;
-use std::sync::{Arc};
-use std::time::Duration;
-use tokio::sync::{mpsc, RwLock};
-use tokio::time::interval;
-use crate::client::{Args, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
-use crate::client::relay::{RelayHandler, new_relay_handler};
-use crate::client::p2p::peer::{PeerHandler};
-use crate::client::prettylog::{get_status, log_startup_banner};
-use crate::client::p2p::stun::StunClient;
 use crate::client::http::server;
+use crate::client::p2p::peer::PeerHandler;
+use crate::client::p2p::stun::StunClient;
+use crate::client::prettylog::{get_status, log_startup_banner};
+use crate::client::relay::{RelayHandler, new_relay_handler};
+use crate::client::{Args, P2P_HOLE_PUNCH_PORT, P2P_UDP_PORT};
 use crate::codec::frame::{DataFrame, Frame, HandshakeReplyFrame};
 use crate::crypto::{self, Block};
-use crate::utils;
-use crate::utils::device::{DeviceHandler};
+use crate::utils::device::DeviceHandler;
+use crate::utils::{self, StunAddr};
+use clap::Parser;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::{RwLock, mpsc};
+use tokio::time::interval;
 
 pub async fn run_client() {
     let args = Args::parse();
@@ -35,38 +35,35 @@ pub async fn run_client() {
     let block = crypto::new_block(&crypto_config);
     let crypto_block: Arc<Box<dyn Block>> = Arc::new(block);
 
-    let ipv6 = utils::get_ipv6().unwrap_or(String::new());
+    let ipv6 = utils::get_ipv6().unwrap_or_default();
     let stun_result = StunClient::new().discover(P2P_HOLE_PUNCH_PORT).await;
-    let (stun_ip, stun_port) = match stun_result {
-        Ok(result) => (result.public_ip.to_string(), result.public_port),
-        Err(_) => {
-            ("".to_string(), 0)
-        }
+    let stun = match stun_result {
+        Ok(result) => Some(StunAddr {
+            ip: result.public_ip.to_string(),
+            port: result.public_port,
+        }),
+        Err(_) => None,
     };
 
     // create relay handler
-    let (mut relay_handler, device_config) = match new_relay_handler(&args,
-                                                        crypto_block.clone(),
-                                                        ipv6, P2P_UDP_PORT,
-                                                        stun_ip,
-                                                        stun_port).await {
-        Ok(result) => result,
-        Err(e) => {
-            tracing::error!("Failed to setup client: {}", e);
-            return;
-        }
-    };
+    let (mut relay_handler, device_config) =
+        match new_relay_handler(&args, crypto_block.clone(), ipv6, P2P_UDP_PORT, stun).await {
+            Ok(result) => result,
+            Err(e) => {
+                tracing::error!("Failed to setup client: {}", e);
+                return;
+            }
+        };
 
     // Initialize P2P handler if enabled (wrapped in Arc<RwLock<>> for sharing with device packet task)
     let p2p_handler = if args.enable_p2p {
         tracing::info!("P2P mode enabled");
 
-        let mut handler = PeerHandler::new(
-            crypto_block.clone(),
-            args.identity.clone(),
-        );
+        let mut handler = PeerHandler::new(crypto_block.clone(), args.identity.clone());
         handler.run_peer_service();
-        handler.rewrite_peers(device_config.peer_details.clone()).await;
+        handler
+            .rewrite_peers(device_config.peer_details.clone())
+            .await;
         handler.start_probe_timer().await;
         Some(Arc::new(RwLock::new(handler)))
     } else {
@@ -77,12 +74,12 @@ pub async fn run_client() {
     // Check iptables availability if masq is enabled (Linux only)
     #[cfg(target_os = "linux")]
     {
-        if args.masq {
-            if let Err(e) = crate::utils::sys_route::SysRoute::check_iptables_available() {
-                eprintln!("❌ Error: {}", e);
-                eprintln!("\nPlease install iptables or run without --masq option.");
-                std::process::exit(1);
-            }
+        if args.masq
+            && let Err(e) = crate::utils::sys_route::SysRoute::check_iptables_available()
+        {
+            eprintln!("❌ Error: {}", e);
+            eprintln!("\nPlease install iptables or run without --masq option.");
+            std::process::exit(1);
         }
     }
 
@@ -91,7 +88,7 @@ pub async fn run_client() {
     let enable_masq = args.masq;
     #[cfg(not(target_os = "linux"))]
     let enable_masq = false;
-    
+
     let mut dev = match init_device(&device_config, enable_masq).await {
         Ok(d) => d,
         Err(e) => {
@@ -113,7 +110,10 @@ pub async fn run_client() {
     run_event_loop(&mut relay_handler, p2p_handler, &mut dev).await;
 }
 
-async fn init_device(device_config: &HandshakeReplyFrame, enable_masq: bool) -> crate::Result<DeviceHandler> {
+async fn init_device(
+    device_config: &HandshakeReplyFrame,
+    enable_masq: bool,
+) -> crate::Result<DeviceHandler> {
     tracing::info!("Initializing device with config: {:?}", device_config);
     let mut dev = DeviceHandler::new();
     let tun_index = dev.run(device_config, enable_masq).await?;
@@ -124,16 +124,16 @@ async fn init_device(device_config: &HandshakeReplyFrame, enable_masq: bool) -> 
     }
 
     dev.reload_route(device_config.peer_details.clone()).await;
-    
+
     // Setup CIDR mapping DNAT rules
-    if !device_config.cider_mapping.is_empty() {
-        if let Err(e) = dev.setup_cidr_mapping(&device_config.cider_mapping) {
-            tracing::error!("Failed to setup CIDR mapping DNAT rules: {}", e);
-            // Don't fail initialization, just log the error
-            // This allows the client to continue even if DNAT setup fails
-        }
+    if !device_config.cider_mapping.is_empty()
+        && let Err(e) = dev.setup_cidr_mapping(&device_config.cider_mapping)
+    {
+        tracing::error!("Failed to setup CIDR mapping DNAT rules: {}", e);
+        // Don't fail initialization, just log the error
+        // This allows the client to continue even if DNAT setup fails
     }
-    
+
     Ok(dev)
 }
 
@@ -215,13 +215,18 @@ async fn handle_device_packet(
     p2p_handler: Option<Arc<RwLock<PeerHandler>>>,
     packet: Vec<u8>,
 ) {
-    let data_frame = DataFrame { payload: packet.clone() };
+    let data_frame = DataFrame {
+        payload: packet.clone(),
+    };
 
     // Try P2P first if available
     if let Some(arc) = &p2p_handler {
         let dst = data_frame.dst();
         let guard = arc.read().await;
-        match guard.send_frame(Frame::Data(data_frame.clone()), dst.as_str()).await {
+        match guard
+            .send_frame(Frame::Data(data_frame.clone()), dst.as_str())
+            .await
+        {
             Ok(_) => {
                 tracing::debug!("Device -> P2P: {} bytes", packet.len());
                 return;
@@ -253,7 +258,10 @@ async fn handle_relay_frame(
             }
         }
         Frame::KeepAlive(keepalive) => {
-            tracing::debug!("Received keepalive with {:?} peer details", keepalive.peer_details);
+            tracing::debug!(
+                "Received keepalive with {:?} peer details",
+                keepalive.peer_details
+            );
 
             // Update routes in device handler
             dev.reload_route(keepalive.peer_details.clone()).await;
