@@ -1,35 +1,38 @@
-use std::process::Command;
-use std::net::Ipv4Addr;
 use ipnet::Ipv4Net;
+use std::net::Ipv4Addr;
+use std::process::Command;
 
 pub struct SysRoute;
 
 /// Convert subnet mask to prefix length
 /// Example: "255.255.255.0" -> 24
-pub(crate) fn mask_to_prefix_length(mask: &str) -> crate::Result<u8> {
-    let mask_addr: Ipv4Addr = mask.parse()
-        .map_err(|_| format!("Invalid subnet mask format: {}", mask))?;
-    
+pub(crate) fn mask_to_prefix_length(mask: &str) -> anyhow::Result<u8> {
+    let mask_addr: Ipv4Addr = mask
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid subnet mask format: {}", mask))?;
+
     // Use ipnet library to convert mask to prefix length
     // We use UNSPECIFIED (0.0.0.0) as the base IP since we only care about the mask
     let net = Ipv4Net::with_netmask(Ipv4Addr::UNSPECIFIED, mask_addr)
-        .map_err(|e| format!("Invalid subnet mask {}: {}", mask, e))?;
-    
+        .map_err(|e| anyhow::anyhow!("Invalid subnet mask {}: {}", mask, e))?;
+
     Ok(net.prefix_len())
 }
 
 /// Convert IP address and subnet mask to network address
 /// Example: ("10.0.0.1", "255.255.255.0") -> "10.0.0.0"
-pub(crate) fn ip_to_network(ip: &str, mask: &str) -> crate::Result<String> {
-    let ip_addr: Ipv4Addr = ip.parse()
-        .map_err(|_| format!("Invalid IP address: {}", ip))?;
-    let mask_addr: Ipv4Addr = mask.parse()
-        .map_err(|_| format!("Invalid subnet mask: {}", mask))?;
-    
+pub(crate) fn ip_to_network(ip: &str, mask: &str) -> anyhow::Result<String> {
+    let ip_addr: Ipv4Addr = ip
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid IP address: {}", ip))?;
+    let mask_addr: Ipv4Addr = mask
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid subnet mask: {}", mask))?;
+
     // Use ipnet library to get network address
     let net = Ipv4Net::with_netmask(ip_addr, mask_addr)
-        .map_err(|e| format!("Invalid IP/mask combination ({} / {}): {}", ip, mask, e))?;
-    
+        .map_err(|e| anyhow::anyhow!("Invalid IP/mask combination ({} / {}): {}", ip, mask, e))?;
+
     Ok(net.network().to_string())
 }
 
@@ -41,25 +44,23 @@ impl SysRoute {
     /// Check if iptables command is available (Linux only)
     /// This should be called before enabling MASQUERADE/SNAT features
     #[cfg(target_os = "linux")]
-    pub fn check_iptables_available() -> crate::Result<()> {
-        let output = Command::new("iptables")
-            .args(["--version"])
-            .output();
-        
+    pub fn check_iptables_available() -> anyhow::Result<()> {
+        let output = Command::new("iptables").args(["--version"]).output();
+
         match output {
             Ok(_) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                Err("iptables command not found. The --masq option requires iptables.\n\
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(anyhow::anyhow!(
+                "iptables command not found. The --masq option requires iptables.\n\
                     Please either:\n\
                     1. Install iptables: sudo apt-get install iptables (Debian/Ubuntu) or sudo yum install iptables (RHEL/CentOS)\n\
-                    2. Run without --masq option".to_string().into())
-            }
-            Err(e) => Err(format!("Failed to check iptables: {}", e).into()),
+                    2. Run without --masq option"
+            )),
+            Err(e) => Err(anyhow::anyhow!("Failed to check iptables: {}", e)),
         }
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn check_iptables_available() -> crate::Result<()> {
+    pub fn check_iptables_available() -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -67,7 +68,12 @@ impl SysRoute {
     /// - dsts: destination CIDR addresses (e.g., ["192.168.1.0/24", "10.0.0.0/8"])
     /// - gateway: gateway IP address
     /// - interface_idx: optional interface index (Windows only)
-    pub fn add(&self, dsts: Vec<String>, gateway: String, interface_idx: Option<i32>) -> crate::Result<()> {
+    pub fn add(
+        &self,
+        dsts: Vec<String>,
+        gateway: String,
+        interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         for dst in dsts {
             self.add_route(&dst, &gateway, interface_idx)?
         }
@@ -79,7 +85,12 @@ impl SysRoute {
     /// - gateway: gateway IP address
     /// - interface_idx: optional interface index (Windows only)
     #[allow(unused)]
-    pub fn del(&self, dsts: Vec<String>, gateway: String, interface_idx: Option<i32>) -> crate::Result<()> {
+    pub fn del(
+        &self,
+        dsts: Vec<String>,
+        gateway: String,
+        interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         for dst in dsts {
             self.del_route(&dst, &gateway, interface_idx)?
         }
@@ -87,68 +98,93 @@ impl SysRoute {
     }
 
     #[cfg(target_os = "linux")]
-    fn add_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
+    fn add_route(
+        &self,
+        dst: &str,
+        gateway: &str,
+        _interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         let output = Command::new("ip")
             .args(["route", "add", dst, "via", gateway])
             .output()
-            .map_err(|e| format!("Failed to execute ip command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute ip command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to add route: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to add route: {}", stderr));
         }
         Ok(())
     }
 
     #[cfg(target_os = "linux")]
-    fn del_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
+    fn del_route(
+        &self,
+        dst: &str,
+        gateway: &str,
+        _interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         let output = Command::new("ip")
             .args(["route", "del", dst, "via", gateway])
             .output()
-            .map_err(|e| format!("Failed to execute ip command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute ip command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to delete route: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to delete route: {}", stderr));
         }
         Ok(())
     }
 
     #[cfg(target_os = "macos")]
-    fn add_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
+    fn add_route(
+        &self,
+        dst: &str,
+        gateway: &str,
+        _interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         let output = Command::new("route")
             .args(["-n", "add", "-net", dst, gateway])
             .output()
-            .map_err(|e| format!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to add route: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to add route: {}", stderr));
         }
         Ok(())
     }
 
     #[cfg(target_os = "macos")]
-    fn del_route(&self, dst: &str, gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
+    fn del_route(
+        &self,
+        dst: &str,
+        gateway: &str,
+        _interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         let output = Command::new("route")
             .args(["-n", "delete", "-net", dst, gateway])
             .output()
-            .map_err(|e| format!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to delete route: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to delete route: {}", stderr));
         }
         Ok(())
     }
 
     #[cfg(target_os = "windows")]
-    fn add_route(&self, dst: &str, gateway: &str, interface_idx: Option<i32>) -> crate::Result<()> {
+    fn add_route(
+        &self,
+        dst: &str,
+        gateway: &str,
+        interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         // Windows route command format: route add <network> mask <netmask> <gateway> if <interface_idx> metric 1
         let (network, mask) = self.parse_cidr(dst)?;
 
         let mut args = vec!["add", &network, "mask", &mask, gateway];
-        
+
         // Add interface index if provided
         let idx_str;
         if let Some(idx) = interface_idx {
@@ -156,7 +192,7 @@ impl SysRoute {
             args.push("if");
             args.push(&idx_str);
         }
-        
+
         // Always use metric 1 for highest priority
         args.push("metric");
         args.push("1");
@@ -164,7 +200,7 @@ impl SysRoute {
         let output = Command::new("route")
             .args(&args)
             .output()
-            .map_err(|e| format!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -173,21 +209,31 @@ impl SysRoute {
                 tracing::debug!("Route already exists: {} via {}", dst, gateway);
                 return Ok(());
             }
-            return Err(format!("Failed to add route: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to add route: {}", stderr));
         }
-        
-        tracing::debug!("Added route: {} via {} (interface: {:?})", dst, gateway, interface_idx);
+
+        tracing::debug!(
+            "Added route: {} via {} (interface: {:?})",
+            dst,
+            gateway,
+            interface_idx
+        );
         Ok(())
     }
 
     #[cfg(target_os = "windows")]
-    fn del_route(&self, dst: &str, _gateway: &str, _interface_idx: Option<i32>) -> crate::Result<()> {
+    fn del_route(
+        &self,
+        dst: &str,
+        _gateway: &str,
+        _interface_idx: Option<i32>,
+    ) -> anyhow::Result<()> {
         let (network, mask) = self.parse_cidr(dst)?;
 
         let output = Command::new("route")
             .args(&["delete", &network, "mask", &mask])
             .output()
-            .map_err(|e| format!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -196,31 +242,31 @@ impl SysRoute {
                 tracing::debug!("Route not found (already deleted): {}", dst);
                 return Ok(());
             }
-            return Err(format!("Failed to delete route: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to delete route: {}", stderr));
         }
         Ok(())
     }
 
     #[allow(unused)]
-    fn parse_cidr(&self, cidr: &str) -> crate::Result<(String, String)> {
+    fn parse_cidr(&self, cidr: &str) -> anyhow::Result<(String, String)> {
         let parts: Vec<&str> = cidr.split('/').collect();
         if parts.len() != 2 {
-            return Err(format!("Invalid CIDR format: {}", cidr).into());
+            return Err(anyhow::anyhow!("Invalid CIDR format: {}", cidr));
         }
 
         let network = parts[0].to_string();
         let prefix_len: u8 = parts[1]
             .parse()
-            .map_err(|_| format!("Invalid prefix length: {}", parts[1]))?;
+            .map_err(|_| anyhow::anyhow!("Invalid prefix length: {}", parts[1]))?;
 
         // Convert prefix length to netmask
         let mask = Self::prefix_to_netmask(prefix_len)?;
         Ok((network, mask))
     }
 
-    fn prefix_to_netmask(prefix_len: u8) -> crate::Result<String> {
+    fn prefix_to_netmask(prefix_len: u8) -> anyhow::Result<String> {
         if prefix_len > 32 {
-            return Err("Invalid prefix length: must be 0-32".into());
+            return Err(anyhow::anyhow!("Invalid prefix length: must be 0-32"));
         }
 
         let mask_int = (!0u32) << (32 - prefix_len);
@@ -238,50 +284,59 @@ impl SysRoute {
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    fn add_route(&self, _dst: &str, _gateway: &str) -> crate::Result<()> {
-        Err("Route management is not supported on this platform".into())
+    fn add_route(&self, _dst: &str, _gateway: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "Route management is not supported on this platform"
+        ))
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    fn del_route(&self, _dst: &str, _gateway: &str) -> crate::Result<()> {
-        Err("Route management is not supported on this platform".into())
+    fn del_route(&self, _dst: &str, _gateway: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "Route management is not supported on this platform"
+        ))
     }
 
     /// Enable MASQUERADE (NAT) for VPN interface using source network address (Linux only)
     /// This allows VPN clients to access external networks through the VPN gateway
     /// Uses source network CIDR instead of interface name for better reliability
     #[cfg(target_os = "linux")]
-    pub fn enable_masquerade_by_source(&self, source_cidr: &str) -> crate::Result<()> {
+    pub fn enable_masquerade_by_source(&self, source_cidr: &str) -> anyhow::Result<()> {
         // Check if rule already exists: iptables -t nat -C POSTROUTING -s <source_cidr> -j MASQUERADE
         let check_output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-C", "POSTROUTING",
-                "-s", source_cidr,
-                "-j", "MASQUERADE"
+                "-t",
+                "nat",
+                "-C",
+                "POSTROUTING",
+                "-s",
+                source_cidr,
+                "-j",
+                "MASQUERADE",
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables check command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables check command: {}", e))?;
 
         if check_output.status.success() {
             tracing::debug!("MASQUERADE rule already exists for source {}", source_cidr);
             return Ok(());
         }
 
+        #[rustfmt::skip]
         // Add iptables rule: iptables -t nat -A POSTROUTING -s <source_cidr> -j MASQUERADE
         let output = Command::new("iptables")
             .args([
                 "-t", "nat",
                 "-A", "POSTROUTING",
                 "-s", source_cidr,
-                "-j", "MASQUERADE"
+                "-j", "MASQUERADE",
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to enable MASQUERADE: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to enable MASQUERADE: {}", stderr));
         }
 
         tracing::info!("Enabled MASQUERADE for source network: {}", source_cidr);
@@ -290,21 +345,22 @@ impl SysRoute {
 
     /// Disable MASQUERADE (NAT) for VPN interface using source network address (Linux only)
     #[cfg(target_os = "linux")]
-    pub fn disable_masquerade_by_source(&self, source_cidr: &str) -> crate::Result<()> {
+    pub fn disable_masquerade_by_source(&self, source_cidr: &str) -> anyhow::Result<()> {
+        #[rustfmt::skip]
         // Remove iptables rule: iptables -t nat -D POSTROUTING -s <source_cidr> -j MASQUERADE
         let output = Command::new("iptables")
             .args([
                 "-t", "nat",
                 "-D", "POSTROUTING",
                 "-s", source_cidr,
-                "-j", "MASQUERADE"
+                "-j", "MASQUERADE",
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to disable MASQUERADE: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to disable MASQUERADE: {}", stderr));
         }
 
         tracing::info!("Disabled MASQUERADE for source network: {}", source_cidr);
@@ -312,12 +368,12 @@ impl SysRoute {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn enable_masquerade_by_source(&self, _interface: &str) -> crate::Result<()> {
+    pub fn enable_masquerade_by_source(&self, _interface: &str) -> anyhow::Result<()> {
         Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn disable_masquerade_by_source(&self, _interface: &str) -> crate::Result<()> {
+    pub fn disable_masquerade_by_source(&self, _interface: &str) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -325,39 +381,58 @@ impl SysRoute {
     /// This allows packets from local ciders to appear as coming from virtual IP
     /// Rule: iptables -t nat -A POSTROUTING -s <local_cidr> -j SNAT --to-source <virtual_ip>
     #[cfg(target_os = "linux")]
-    pub fn enable_snat_for_local_network(&self, local_cidr: &str, _tun_interface: &str, virtual_ip: &str) -> crate::Result<()> {
+    pub fn enable_snat_for_local_network(
+        &self,
+        local_cidr: &str,
+        _tun_interface: &str,
+        virtual_ip: &str,
+    ) -> anyhow::Result<()> {
         // Check if rule already exists: iptables -t nat -C POSTROUTING -s <local_cidr> -j SNAT --to-source <virtual_ip>
         let check_output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-C", "POSTROUTING",
-                "-s", local_cidr,
-                "-j", "SNAT",
-                "--to-source", virtual_ip
+                "-t",
+                "nat",
+                "-C",
+                "POSTROUTING",
+                "-s",
+                local_cidr,
+                "-j",
+                "SNAT",
+                "--to-source",
+                virtual_ip,
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables check command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables check command: {}", e))?;
 
         if check_output.status.success() {
-            tracing::debug!("SNAT rule already exists for {} -> {}", local_cidr, virtual_ip);
+            tracing::debug!(
+                "SNAT rule already exists for {} -> {}",
+                local_cidr,
+                virtual_ip
+            );
             return Ok(());
         }
 
         // Add iptables rule: iptables -t nat -A POSTROUTING -s <local_cidr> -j SNAT --to-source <virtual_ip>
         let output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-A", "POSTROUTING",
-                "-s", local_cidr,
-                "-j", "SNAT",
-                "--to-source", virtual_ip
+                "-t",
+                "nat",
+                "-A",
+                "POSTROUTING",
+                "-s",
+                local_cidr,
+                "-j",
+                "SNAT",
+                "--to-source",
+                virtual_ip,
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to enable SNAT: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to enable SNAT: {}", stderr));
         }
 
         tracing::info!("Enabled SNAT for {} -> {}", local_cidr, virtual_ip);
@@ -366,21 +441,27 @@ impl SysRoute {
 
     /// Disable SNAT for local network segments (Linux only)
     #[cfg(target_os = "linux")]
-    pub fn disable_snat_for_local_network(&self, local_cidr: &str, _tun_interface: &str, virtual_ip: &str) -> crate::Result<()> {
+    pub fn disable_snat_for_local_network(
+        &self,
+        local_cidr: &str,
+        _tun_interface: &str,
+        virtual_ip: &str,
+    ) -> anyhow::Result<()> {
+        #[rustfmt::skip]
         let output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-D", "POSTROUTING",
-                "-s", local_cidr,
-                "-j", "SNAT",
-                "--to-source", virtual_ip
+                "-t",          "nat",
+                "-D",          "POSTROUTING",
+                "-s",          local_cidr,
+                "-j",          "SNAT",
+                "--to-source", virtual_ip,
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to disable SNAT: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to disable SNAT: {}", stderr));
         }
 
         tracing::info!("Disabled SNAT for {} -> {}", local_cidr, virtual_ip);
@@ -388,35 +469,46 @@ impl SysRoute {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn enable_snat_for_local_network(&self, _local_cidr: &str, _tun_interface: &str, _virtual_ip: &str) -> crate::Result<()> {
+    pub fn enable_snat_for_local_network(
+        &self,
+        _local_cidr: &str,
+        _tun_interface: &str,
+        _virtual_ip: &str,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn disable_snat_for_local_network(&self, _local_cidr: &str, _tun_interface: &str, _virtual_ip: &str) -> crate::Result<()> {
+    pub fn disable_snat_for_local_network(
+        &self,
+        _local_cidr: &str,
+        _tun_interface: &str,
+        _virtual_ip: &str,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
     /// Enable DNAT/NETMAP for CIDR mapping (Linux only)
     /// Maps destination IPs from mapped CIDR to real CIDR
     /// Uses NETMAP target: iptables -t nat -A PREROUTING -d <mapped_cidr> -j NETMAP --to <real_cidr>
-    /// 
+    ///
     /// # Arguments
     /// * `mapped_cidr` - The CIDR that other clients see (e.g., "192.168.11.0/24")
     /// * `real_cidr` - The real CIDR network (e.g., "192.168.10.0/24")
-    /// 
+    ///
     /// # Example
     /// When a packet arrives with destination IP in `mapped_cidr`, it will be translated
     /// to the corresponding IP in `real_cidr` before being forwarded to the local network.
     #[cfg(target_os = "linux")]
-    pub fn enable_cidr_dnat(&self, mapped_cidr: &str, real_cidr: &str) -> crate::Result<()> {
+    pub fn enable_cidr_dnat(&self, mapped_cidr: &str, real_cidr: &str) -> anyhow::Result<()> {
+        #[rustfmt::skip]
         // Check if NETMAP rule already exists: iptables -t nat -C PREROUTING -d <mapped_cidr> -j NETMAP --to <real_cidr>
         let check_output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-C", "PREROUTING",
-                "-d", mapped_cidr,
-                "-j", "NETMAP",
+                "-t",   "nat",
+                "-C",   "PREROUTING",
+                "-d",   mapped_cidr,
+                "-j",   "NETMAP",
                 "--to", real_cidr,
             ])
             .output();
@@ -429,23 +521,24 @@ impl SysRoute {
             _ => {}
         }
 
+        #[rustfmt::skip]
         // Add NETMAP rule: iptables -t nat -A PREROUTING -d <mapped_cidr> -j NETMAP --to <real_cidr>
         let output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-A", "PREROUTING",
-                "-d", mapped_cidr,
-                "-j", "NETMAP",
+                "-t",   "nat",
+                "-A",   "PREROUTING",
+                "-d",   mapped_cidr,
+                "-j",   "NETMAP",
                 "--to", real_cidr,
             ])
             .output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    "iptables command not found. CIDR mapping requires iptables with NETMAP support.\n\
+                    anyhow::anyhow!("iptables command not found. CIDR mapping requires iptables with NETMAP support.\n\
                         Please install iptables and ensure your kernel supports NETMAP target.\n\
-                        NETMAP requires Linux kernel 2.6.32+ with netfilter NETMAP module.".to_string()
+                        NETMAP requires Linux kernel 2.6.32+ with netfilter NETMAP module.")
                 } else {
-                    format!("Failed to execute iptables command: {}", e)
+                    anyhow::anyhow!("Failed to execute iptables command: {}", e)
                 }
             })?;
 
@@ -453,13 +546,14 @@ impl SysRoute {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // Check if NETMAP is not supported
             if stderr.contains("No chain/target/match") || stderr.contains("NETMAP") {
-                return Err(format!(
+                return Err(anyhow::anyhow!(
                     "NETMAP target not supported. CIDR mapping requires kernel support for NETMAP.\n\
                     Please ensure your kernel has NETMAP support (Linux 2.6.32+) or use a different approach.\n\
-                    Error: {}", stderr
-                ).into());
+                    Error: {}",
+                    stderr
+                ));
             }
-            return Err(format!("Failed to add DNAT rule: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to add DNAT rule: {}", stderr));
         }
 
         tracing::info!("Added DNAT rule: {} -> {}", mapped_cidr, real_cidr);
@@ -468,31 +562,39 @@ impl SysRoute {
 
     /// Disable DNAT/NETMAP for CIDR mapping (Linux only)
     /// Removes the NETMAP rule that was previously added
-    /// 
+    ///
     /// # Arguments
     /// * `mapped_cidr` - The mapped CIDR (e.g., "192.168.11.0/24")
     /// * `real_cidr` - The real CIDR (e.g., "192.168.10.0/24")
     #[cfg(target_os = "linux")]
-    pub fn disable_cidr_dnat(&self, mapped_cidr: &str, real_cidr: &str) -> crate::Result<()> {
+    pub fn disable_cidr_dnat(&self, mapped_cidr: &str, real_cidr: &str) -> anyhow::Result<()> {
+        #[rustfmt::skip]
         let output = Command::new("iptables")
             .args([
-                "-t", "nat",
-                "-D", "PREROUTING",
-                "-d", mapped_cidr,
-                "-j", "NETMAP",
+                "-t",   "nat",
+                "-D",   "PREROUTING",
+                "-d",   mapped_cidr,
+                "-j",   "NETMAP",
                 "--to", real_cidr,
             ])
             .output()
-            .map_err(|e| format!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // Ignore "not found" error (rule already deleted)
-            if stderr.contains("not found") || stderr.contains("找不到") || stderr.contains("No rule") {
-                tracing::debug!("DNAT rule not found (already deleted): {} -> {}", mapped_cidr, real_cidr);
+            if stderr.contains("not found")
+                || stderr.contains("找不到")
+                || stderr.contains("No rule")
+            {
+                tracing::debug!(
+                    "DNAT rule not found (already deleted): {} -> {}",
+                    mapped_cidr,
+                    real_cidr
+                );
                 return Ok(());
             }
-            return Err(format!("Failed to delete DNAT rule: {}", stderr).into());
+            return Err(anyhow::anyhow!("Failed to delete DNAT rule: {}", stderr));
         }
 
         tracing::info!("Deleted DNAT rule: {} -> {}", mapped_cidr, real_cidr);
@@ -500,13 +602,17 @@ impl SysRoute {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn enable_cidr_dnat(&self, _mapped_cidr: &str, _real_cidr: &str) -> crate::Result<()> {
-        Err("CIDR mapping DNAT is only supported on Linux".into())
+    pub fn enable_cidr_dnat(&self, _mapped_cidr: &str, _real_cidr: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "CIDR mapping DNAT is only supported on Linux"
+        ))
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn disable_cidr_dnat(&self, _mapped_cidr: &str, _real_cidr: &str) -> crate::Result<()> {
-        Err("CIDR mapping DNAT is only supported on Linux".into())
+    pub fn disable_cidr_dnat(&self, _mapped_cidr: &str, _real_cidr: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "CIDR mapping DNAT is only supported on Linux"
+        ))
     }
 }
 

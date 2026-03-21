@@ -31,7 +31,7 @@ impl Parser {
     /// # Returns
     /// * `Ok((Frame, usize))` - Parsed frame and total bytes consumed
     /// * `Err` - If frame is invalid, too short, or decryption/parsing fails
-    pub fn unmarshal(buf: &[u8], block: &dyn Block) -> crate::Result<(Frame, usize)> {
+    pub fn unmarshal(buf: &[u8], block: &dyn Block) -> anyhow::Result<(Frame, usize)> {
         if buf.len() < HDR_LEN {
             return Err(FrameError::TooShort.into());
         }
@@ -123,7 +123,7 @@ impl Parser {
     fn decrypt_and_deserialize<T: DeserializeOwned>(
         payload: &mut Vec<u8>,
         block: &dyn Block,
-    ) -> crate::Result<T> {
+    ) -> anyhow::Result<T> {
         block
             .decrypt(payload)
             .map_err(FrameError::DecryptionFailed)?;
@@ -146,7 +146,7 @@ impl Parser {
         data: &T,
         block: &dyn Block,
         context_msg: &str,
-    ) -> crate::Result<Vec<u8>> {
+    ) -> anyhow::Result<Vec<u8>> {
         let msg = context_msg.to_string();
         let json = serde_json::to_string(data).with_context(|| msg)?;
         let mut payload = json.as_bytes().to_vec();
@@ -185,7 +185,7 @@ impl Parser {
     /// # Returns
     /// * `Ok(Vec<u8>)` - Complete frame bytes (header + encrypted payload)
     /// * `Err` - If serialization or encryption fails
-    pub fn marshal(frame: Frame, block: &dyn Block) -> crate::Result<Vec<u8>> {
+    pub fn marshal(frame: Frame, block: &dyn Block) -> anyhow::Result<Vec<u8>> {
         match frame {
             Frame::Handshake(hs) => {
                 let payload =

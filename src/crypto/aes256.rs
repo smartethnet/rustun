@@ -74,14 +74,14 @@ impl Block for Aes256Block {
     /// # Returns
     /// * `Ok(())` on success
     /// * `Err` if encryption fails
-    fn encrypt(&self, data: &mut Vec<u8>) -> crate::Result<()> {
+    fn encrypt(&self, data: &mut Vec<u8>) -> anyhow::Result<()> {
         let nonce_bytes = Self::generate_nonce();
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let ciphertext = self
             .cipher
             .encrypt(nonce, data.as_ref())
-            .map_err(|e| format!("AES-256-GCM encryption failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("AES-256-GCM encryption failed: {}", e))?;
 
         // Replace data with: nonce || ciphertext (ciphertext already includes auth tag)
         data.clear();
@@ -102,10 +102,10 @@ impl Block for Aes256Block {
     /// # Returns
     /// * `Ok(())` on success
     /// * `Err` if data is too short, decryption fails, or authentication fails
-    fn decrypt(&self, data: &mut Vec<u8>) -> crate::Result<()> {
+    fn decrypt(&self, data: &mut Vec<u8>) -> anyhow::Result<()> {
         // Minimum length: 12 (nonce) + 16 (tag) = 28 bytes
         if data.len() < 28 {
-            return Err("Data too short for AES-256-GCM decryption".into());
+            return Err(anyhow::anyhow!("Data too short for AES-256-GCM decryption"));
         }
 
         let nonce = Nonce::from_slice(&data[0..12]);
@@ -114,7 +114,7 @@ impl Block for Aes256Block {
         let plaintext = self
             .cipher
             .decrypt(nonce, ciphertext)
-            .map_err(|e| format!("AES-256-GCM decryption failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("AES-256-GCM decryption failed: {}", e))?;
 
         // Replace data with plaintext
         data.clear();

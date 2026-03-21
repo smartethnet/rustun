@@ -24,12 +24,12 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[async_trait]
 pub trait ConnRead: Send + Sync {
-    async fn read_frame(&mut self) -> crate::Result<Frame>;
+    async fn read_frame(&mut self) -> anyhow::Result<Frame>;
 }
 
 #[async_trait]
 pub trait ConnWrite: Send + Sync {
-    async fn write_frame(&mut self, frame: Frame) -> crate::Result<()>;
+    async fn write_frame(&mut self, frame: Frame) -> anyhow::Result<()>;
     async fn close(&mut self);
 }
 
@@ -54,7 +54,7 @@ pub trait Listener: Send + Sync {
     /// # Returns
     /// - `Ok(())` - Listener closed gracefully
     /// - `Err` - Failed to bind or accept connections
-    async fn listen_and_serve(&mut self) -> crate::Result<()>;
+    async fn listen_and_serve(&mut self) -> anyhow::Result<()>;
 
     /// Subscribe to new connections
     ///
@@ -64,7 +64,7 @@ pub trait Listener: Send + Sync {
     /// # Returns
     /// - `Ok(Receiver)` - Channel for receiving new connections
     /// - `Err` - Failed to create subscription channel
-    async fn subscribe_on_conn(&mut self) -> crate::Result<mpsc::Receiver<Box<dyn ConnManage>>>;
+    async fn subscribe_on_conn(&mut self) -> anyhow::Result<mpsc::Receiver<Box<dyn ConnManage>>>;
 
     /// Close the listener
     ///
@@ -73,7 +73,7 @@ pub trait Listener: Send + Sync {
     /// # Returns
     /// - `Ok(())` - Listener closed successfully
     /// - `Err` - Error during shutdown
-    async fn close(&mut self) -> crate::Result<()>;
+    async fn close(&mut self) -> anyhow::Result<()>;
 }
 
 /// Metadata for a client connection
@@ -177,7 +177,7 @@ pub enum ListenerConfig {
 pub fn create_listener(
     config: ListenerConfig,
     block: Arc<Box<dyn Block>>,
-) -> crate::Result<Box<dyn Listener>> {
+) -> anyhow::Result<Box<dyn Listener>> {
     match config {
         TCP(config) => Ok(Box::new(TCPListener::new(config.listen_addr, block))),
     }
@@ -194,7 +194,7 @@ pub enum ConnectionConfig {
 pub async fn create_connection(
     config: ConnectionConfig,
     block: Arc<Box<dyn Block>>,
-) -> crate::Result<Box<dyn ConnManage>> {
+) -> anyhow::Result<Box<dyn ConnManage>> {
     match config {
         ConnectionConfig::TCP(config) => {
             // Connect with timeout
@@ -210,7 +210,7 @@ pub async fn create_connection(
                     Ok(Box::new(conn))
                 }
                 Ok(Err(e)) => Err(e.into()),
-                Err(_) => Err("connection timeout".into()),
+                Err(_) => Err(anyhow::anyhow!("connection timeout")),
             }
         }
     }

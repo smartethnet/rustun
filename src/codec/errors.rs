@@ -42,7 +42,7 @@ pub(crate) enum FrameError {
     /// - Data was tampered with during transmission
     /// - Wrong encryption key is being used
     /// - Payload is too short for the cipher's requirements
-    DecryptionFailed(crate::Error),
+    DecryptionFailed(anyhow::Error),
 }
 
 impl std::error::Error for FrameError {}

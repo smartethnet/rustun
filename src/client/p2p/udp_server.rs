@@ -112,7 +112,7 @@ impl UDPServer {
     /// # Note
     ///
     /// This method never returns under normal operation. It only exits on error.
-    pub async fn serve(&mut self) -> crate::Result<()> {
+    pub async fn serve(&mut self) -> anyhow::Result<()> {
         // Bind IPv6 socket for direct connections
         // [::] means all IPv6 interfaces (equivalent to 0.0.0.0 for IPv4)
         let socket_ipv6 = UdpSocket::bind(format!("[::]:{}", self.listen_port)).await?;
@@ -221,7 +221,7 @@ impl UDPServer {
         result: std::io::Result<(usize, SocketAddr)>,
         buffer: &mut [u8],
         protocol: &str,
-    ) -> crate::Result<()> {
+    ) -> anyhow::Result<()> {
         match result {
             Ok((len, remote)) => {
                 // Copy only the received bytes (not the entire buffer)

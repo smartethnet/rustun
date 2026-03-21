@@ -101,7 +101,7 @@ impl TcpConnection {
     /// - `Ok(Some(Frame))` - Successfully parsed frame
     /// - `Ok(None)` - Incomplete data, need more bytes
     /// - `Err` - Parse error (invalid frame format)
-    fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
+    fn parse_frame(&mut self) -> anyhow::Result<Option<Frame>> {
         let result = Parser::unmarshal(self.input_stream.as_ref(), self.block.as_ref().as_ref());
         match result {
             Ok((frame, total_len)) => {
@@ -115,18 +115,19 @@ impl TcpConnection {
 
 #[async_trait]
 impl ConnRead for TcpConnection {
-    async fn read_frame(&mut self) -> crate::Result<Frame> {
+    async fn read_frame(&mut self) -> anyhow::Result<Frame> {
         let deadline = Instant::now() + self.read_timeout;
 
         loop {
             if Instant::now() > deadline {
-                return Err("read timeout".into());
+                return Err(anyhow::anyhow!("read timeout"));
             }
 
             if let Ok(frame) = self.parse_frame()
-                && let Some(frame) = frame {
-                    return Ok(frame);
-                }
+                && let Some(frame) = frame
+            {
+                return Ok(frame);
+            }
 
             let remaining = deadline.saturating_duration_since(Instant::now());
 
@@ -136,16 +137,16 @@ impl ConnRead for TcpConnection {
             match read_result {
                 Ok(Ok(0)) => {
                     return if self.input_stream.is_empty() {
-                        Err("EOF".into())
+                        Err(anyhow::anyhow!("EOF"))
                     } else {
-                        Err("connection reset by peer".into())
+                        Err(anyhow::anyhow!("connection reset by peer"))
                     };
                 }
                 Ok(Ok(n)) => {
                     tracing::debug!("read {} bytes", n)
                 }
                 Ok(Err(e)) => return Err(e.into()),
-                Err(_) => return Err("read timeout".into()),
+                Err(_) => return Err(anyhow::anyhow!("read timeout")),
             }
         }
     }
@@ -153,7 +154,7 @@ impl ConnRead for TcpConnection {
 
 #[async_trait]
 impl ConnWrite for TcpConnection {
-    async fn write_frame(&mut self, frame: Frame) -> crate::Result<()> {
+    async fn write_frame(&mut self, frame: Frame) -> anyhow::Result<()> {
         let result = Parser::marshal(frame, self.block.as_ref().as_ref());
         let buf = match result {
             Ok(buf) => buf,
@@ -172,7 +173,7 @@ impl ConnWrite for TcpConnection {
         match write_result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(e)) => Err(e.into()),
-            Err(_) => Err("write timeout".into()),
+            Err(_) => Err(anyhow::anyhow!("write timeout")),
         }
     }
 

@@ -46,7 +46,7 @@ impl Server {
 }
 
 impl Server {
-    pub async fn run(&mut self) -> crate::Result<()> {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         // only for tcp now, may support multi listener type
         let listener_config = ListenerConfig::TCP(TCPListenerConfig {
             listen_addr: self.server_config.listen_addr.clone(),
@@ -79,7 +79,7 @@ impl Server {
         }
     }
 
-    fn handle_conn(&self, mut conn: Box<dyn ConnManage>) -> crate::Result<()> {
+    fn handle_conn(&self, mut conn: Box<dyn ConnManage>) -> anyhow::Result<()> {
         let peer_addr = conn.peer_addr().unwrap();
         tracing::debug!("new connection from {}", conn.peer_addr().unwrap());
 
@@ -122,7 +122,7 @@ impl Handler {
         }
     }
 
-    pub async fn run(&mut self) -> crate::Result<()> {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         // handshake
         let hs = match self.handle_handshake().await {
             Ok(hs) => hs,
@@ -206,7 +206,7 @@ impl Handler {
         Ok(())
     }
 
-    async fn handle_handshake(&mut self) -> crate::Result<HandshakeFrame> {
+    async fn handle_handshake(&mut self) -> anyhow::Result<HandshakeFrame> {
         let frame = self.conn.read_frame().await;
         match frame {
             Ok(frame) => {
@@ -214,7 +214,7 @@ impl Handler {
                 if let Frame::Handshake(handshake) = frame {
                     Ok(handshake)
                 } else {
-                    Err("unexpected frame type when handshaking".into())
+                    Err(anyhow::anyhow!("unexpected frame type when handshaking"))
                 }
             }
             Err(e) => Err(e),

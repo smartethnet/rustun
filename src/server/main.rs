@@ -7,13 +7,12 @@ use crate::server::handler::Server;
 use crate::{crypto, utils};
 use std::sync::Arc;
 
-pub async fn run_server() {
+pub async fn run_server() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<String>>();
     let cfg = config::load_main(args.get(1).unwrap_or(&"server.toml".to_string())).unwrap();
 
     if let Err(e) = utils::init_tracing() {
-        eprintln!("Failed to initialize logging: {}", e);
-        return;
+        anyhow::bail!("Failed to initialize logging: {}", e);
     }
 
     let routes_file = cfg.route_config.routes_file.clone();
@@ -57,6 +56,7 @@ pub async fn run_server() {
         Arc::new(block),
     );
     if let Err(e) = server.run().await {
-        tracing::error!("Server error: {}", e);
+        anyhow::bail!("Server error: {}", e);
     }
+    Ok(())
 }

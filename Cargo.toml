@@ -36,14 +36,6 @@ once_cell = "1.20"
 [dev-dependencies]
 tokio-test = "0.4"
 
-[[bin]]
-name = "server"
-path = "src/cmd/server.rs"
-
-[[bin]]
-name = "client"
-path = "src/cmd/client.rs"
-
 [[example]]
 name = "stun_discover"
 path = "examples/stun_discover.rs"

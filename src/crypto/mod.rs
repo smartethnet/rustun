@@ -31,7 +31,7 @@ pub trait Block: Send + Sync {
     /// # Returns
     /// * `Ok(())` on success
     /// * `Err` if encryption fails
-    fn encrypt(&self, data: &mut Vec<u8>) -> crate::Result<()>;
+    fn encrypt(&self, data: &mut Vec<u8>) -> anyhow::Result<()>;
 
     /// Decrypts data in-place
     ///
@@ -41,7 +41,7 @@ pub trait Block: Send + Sync {
     /// # Returns
     /// * `Ok(())` on success
     /// * `Err` if decryption fails
-    fn decrypt(&self, data: &mut Vec<u8>) -> crate::Result<()>;
+    fn decrypt(&self, data: &mut Vec<u8>) -> anyhow::Result<()>;
 }
 
 /// Factory function to create cipher blocks from configuration

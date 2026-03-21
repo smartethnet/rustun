@@ -43,7 +43,7 @@ impl Device {
         }
     }
 
-    pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>, name: oneshot::Sender<Option<String>>) -> crate::Result<()> {
+    pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>, name: oneshot::Sender<Option<String>>) -> anyhow::Result<()> {
         let mut config = tun::Configuration::default();
         config
             .address(self.ip.clone())
@@ -140,7 +140,7 @@ impl DeviceHandler {
         }
     }
 
-    pub async fn run(&mut self, cfg: &HandshakeReplyFrame, enable_masq: bool) -> crate::Result<Option<i32>> {
+    pub async fn run(&mut self, cfg: &HandshakeReplyFrame, enable_masq: bool) -> anyhow::Result<Option<i32>> {
         let (inbound_tx, inbound_rx) = mpsc::channel(1000);
         let (outbound_tx, outbound_rx) = mpsc::channel(1000);
         self.inbound_rx = Some(inbound_rx);
@@ -203,11 +203,11 @@ impl DeviceHandler {
         result
     }
 
-    pub async fn send(&mut self, packet: Vec<u8>) -> crate::Result<()> {
+    pub async fn send(&mut self, packet: Vec<u8>) -> anyhow::Result<()> {
         let outbound_tx = match self.outbound_tx.as_ref() {
             Some(tx) => tx,
             None => {
-                return Err("device handler send none".into());
+                return Err(anyhow::anyhow!("device handler send none"));
             }
         };
         self.tx_bytes+=packet.len();
@@ -273,7 +273,7 @@ impl DeviceHandler {
 
     /// Enable MASQUERADE (NAT) for VPN interface (Linux only)
     /// Uses source network address instead of interface name for better reliability
-    pub fn enable_masquerade(&mut self) -> crate::Result<()> {
+    pub fn enable_masquerade(&mut self) -> anyhow::Result<()> {
         let cidr = self.ip_mask_to_cidr(&self.private_ip, &self.mask)?;
         
         let sys_route = SysRoute::new();
@@ -282,7 +282,7 @@ impl DeviceHandler {
     }
 
     /// Disable MASQUERADE (NAT) for VPN interface (Linux only)
-    pub fn disable_masquerade(&mut self) -> crate::Result<()> {
+    pub fn disable_masquerade(&mut self) -> anyhow::Result<()> {
         let cidr = self.ip_mask_to_cidr(&self.private_ip, &self.mask)?;
         
         let sys_route = SysRoute::new();
@@ -291,7 +291,7 @@ impl DeviceHandler {
     }
 
     /// Convert IP address and subnet mask to CIDR notation
-    fn ip_mask_to_cidr(&self, ip: &str, mask: &str) -> crate::Result<String> {
+    fn ip_mask_to_cidr(&self, ip: &str, mask: &str) -> anyhow::Result<String> {
         // Parse subnet mask to prefix length
         let prefix_len = mask_to_prefix_length(mask)?;
         let network = ip_to_network(ip, mask)?;
@@ -300,7 +300,7 @@ impl DeviceHandler {
 
     /// Enable SNAT for local network segments to use virtual IP (Linux only)
     /// This makes packets from local ciders appear as coming from virtual IP
-    pub fn enable_snat(&mut self) -> crate::Result<()> {
+    pub fn enable_snat(&mut self) -> anyhow::Result<()> {
         let sys_route = SysRoute::new();
         
         for cidr in &self.local_ciders {
@@ -311,7 +311,7 @@ impl DeviceHandler {
     }
 
     /// Disable SNAT for local network segments (Linux only)
-    pub fn disable_snat(&mut self) -> crate::Result<()> {
+    pub fn disable_snat(&mut self) -> anyhow::Result<()> {
         let sys_route = SysRoute::new();
         
         for cidr in &self.local_ciders {
@@ -324,7 +324,7 @@ impl DeviceHandler {
     /// This should be called after receiving HandshakeReplyFrame
     /// Maps destination IPs from mapped CIDR to real CIDR using iptables NETMAP
     #[cfg(target_os = "linux")]
-    pub fn setup_cidr_mapping(&mut self, cidr_mapping: &HashMap<String, String>) -> crate::Result<()> {
+    pub fn setup_cidr_mapping(&mut self, cidr_mapping: &HashMap<String, String>) -> anyhow::Result<()> {
         let sys_route = SysRoute::new();
         
         for (mapped_cidr, real_cidr) in cidr_mapping {
@@ -344,7 +344,7 @@ impl DeviceHandler {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn setup_cidr_mapping(&mut self, _cidr_mapping: &HashMap<String, String>) -> crate::Result<()> {
+    pub fn setup_cidr_mapping(&mut self, _cidr_mapping: &HashMap<String, String>) -> anyhow::Result<()> {
         Ok(())
     }
 }

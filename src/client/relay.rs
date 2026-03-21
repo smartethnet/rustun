@@ -47,7 +47,7 @@ impl RelayClient {
         }
     }
 
-    pub async fn run(&mut self, mut conn: Box<dyn ConnManage>) -> crate::Result<()> {
+    pub async fn run(&mut self, mut conn: Box<dyn ConnManage>) -> anyhow::Result<()> {
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
         let mut keepalive_wait: u8 = 0;
 
@@ -162,7 +162,7 @@ impl RelayClient {
         Ok(())
     }
 
-    async fn connect(&self) -> crate::Result<Box<dyn ConnManage>> {
+    async fn connect(&self) -> anyhow::Result<Box<dyn ConnManage>> {
         let conn = create_connection(
             ConnectionConfig::TCP(TCPConnectionConfig {
                 server_addr: self.cfg.server_addr.clone(),
@@ -179,7 +179,7 @@ impl RelayClient {
     async fn handshake(
         &self,
         conn: &mut Box<dyn ConnManage>,
-    ) -> crate::Result<HandshakeReplyFrame> {
+    ) -> anyhow::Result<HandshakeReplyFrame> {
         conn.write_frame(Frame::Handshake(HandshakeFrame {
             identity: self.cfg.identity.clone(),
         }))
@@ -190,7 +190,7 @@ impl RelayClient {
             return Ok(frame);
         }
 
-        Err("invalid frame".into())
+        Err(anyhow::anyhow!("invalid frame"))
     }
 }
 
@@ -314,19 +314,19 @@ impl RelayHandler {
         self.outbound_tx.clone()
     }
 
-    pub async fn send_frame(outbound_tx: mpsc::Sender<Frame>, frame: Frame) -> crate::Result<()> {
+    pub async fn send_frame(outbound_tx: mpsc::Sender<Frame>, frame: Frame) -> anyhow::Result<()> {
         // self.metrics.tx_frame += 1;
         let result = outbound_tx.send(frame).await;
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
                 // self.metrics.tx_error += 1;
-                Err(format!("device=> server fail {:?}", e).into())
+                Err(anyhow::anyhow!("device=> server fail {:?}", e))
             }
         }
     }
 
-    pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
+    pub async fn recv_frame(&mut self) -> anyhow::Result<Frame> {
         let result = self.inbound_rx.recv().await;
         match result {
             Some(frame) => {
@@ -335,7 +335,7 @@ impl RelayHandler {
             }
             None => {
                 self.metrics.rx_error += 1;
-                Err("server => device fail for closed channel".into())
+                Err(anyhow::anyhow!("server => device fail for closed channel"))
             }
         }
     }
@@ -351,7 +351,7 @@ pub async fn new_relay_handler(
     ipv6: String,
     port: u16,
     stun: Option<StunAddr>,
-) -> crate::Result<(RelayHandler, HandshakeReplyFrame)> {
+) -> anyhow::Result<(RelayHandler, HandshakeReplyFrame)> {
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
         keepalive_interval: Duration::from_secs(args.keepalive_interval),
@@ -370,7 +370,7 @@ pub async fn new_relay_handler(
     let device_config = config_ready_rx
         .recv()
         .await
-        .ok_or("Failed to receive device config from server")?;
+        .ok_or_else(|| anyhow::anyhow!("Failed to receive device config from server"))?;
 
     log_handshake_success(&device_config);
 

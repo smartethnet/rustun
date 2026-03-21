@@ -53,7 +53,7 @@ impl ConfAgent {
     }
 
     /// Start the conf-agent service
-    pub async fn start(self: Arc<Self>) -> crate::Result<()> {
+    pub async fn start(self: Arc<Self>) -> anyhow::Result<()> {
         tracing::info!("Starting conf-agent");
         tracing::info!("Control plane URL: {}", self.config.control_plane_url);
         tracing::info!("Routes file: {}", self.config.routes_file);
@@ -88,7 +88,7 @@ impl ConfAgent {
     }
 
     /// Report connections from connection manager
-    async fn report_connections(&self) -> crate::Result<()> {
+    async fn report_connections(&self) -> anyhow::Result<()> {
         // Get connections from connection manager
         let connections = self.connection_manager.dump_connection_info();
 
@@ -132,7 +132,7 @@ impl ConfAgent {
     }
 
     /// Fetch routes from control plane and update local routes file
-    async fn fetch_and_update_routes(&self) -> crate::Result<()> {
+    async fn fetch_and_update_routes(&self) -> anyhow::Result<()> {
         tracing::debug!("Fetching routes from control plane...");
 
         let url = format!("{}/api/sync/clients", self.config.control_plane_url);
@@ -155,7 +155,7 @@ impl ConfAgent {
     async fn fetch_routes(
         url: &str,
         token: Option<&str>,
-    ) -> crate::Result<Vec<ClientConfig>> {
+    ) -> anyhow::Result<Vec<ClientConfig>> {
         let mut request = ureq::get(url).timeout(Duration::from_secs(30));
 
         if let Some(token) = token {
@@ -168,7 +168,7 @@ impl ConfAgent {
         let body = response.into_string()?;
         
         if status != 200 {
-            return Err(format!("Control plane returned error: {} - {}", status, body).into());
+            return Err(anyhow::anyhow!("Control plane returned error: {} - {}", status, body));
         }
 
         let routes: Vec<ClientConfigResponse> = serde_json::from_str(&body)?;
@@ -192,7 +192,7 @@ impl ConfAgent {
     }
 
     /// Write routes to file atomically
-    async fn write_routes(file_path: &str, routes: &[ClientConfig]) -> crate::Result<()> {
+    async fn write_routes(file_path: &str, routes: &[ClientConfig]) -> anyhow::Result<()> {
         // Ensure parent directory exists
         if let Some(parent) = std::path::Path::new(file_path).parent() {
             fs::create_dir_all(parent).await?;
@@ -215,7 +215,7 @@ impl ConfAgent {
         url: &str,
         token: Option<&str>,
         updates: &[ConnectionUpdateRequest],
-    ) -> crate::Result<()> {
+    ) -> anyhow::Result<()> {
         let json_data = serde_json::to_string(updates)?;
 
         let mut request = ureq::post(url)
@@ -231,7 +231,7 @@ impl ConfAgent {
         let body = response.into_string()?;
 
         if status != 200 {
-            return Err(format!("Backend returned error: {} - {}", status, body).into());
+            return Err(anyhow::anyhow!("Backend returned error: {} - {}", status, body));
         }
 
         Ok(())

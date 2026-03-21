@@ -14,12 +14,11 @@ use std::time::Duration;
 use tokio::sync::{RwLock, mpsc};
 use tokio::time::interval;
 
-pub async fn run_client() {
+pub async fn run_client() -> anyhow::Result<()> {
     let args = Args::parse();
 
     if let Err(e) = utils::init_tracing() {
-        eprintln!("Failed to initialize logging: {}", e);
-        return;
+        anyhow::bail!("Failed to initialize logging: {}", e);
     }
 
     log_startup_banner(&args);
@@ -28,8 +27,7 @@ pub async fn run_client() {
     let crypto_config = match crypto::parse_crypto_config(&args.crypto) {
         Ok(cfg) => cfg,
         Err(e) => {
-            tracing::error!("Invalid crypto configuration: {}", e);
-            return;
+            anyhow::bail!("Invalid crypto configuration: {}", e);
         }
     };
     let block = crypto::new_block(&crypto_config);
@@ -50,8 +48,7 @@ pub async fn run_client() {
         match new_relay_handler(&args, crypto_block.clone(), ipv6, P2P_UDP_PORT, stun).await {
             Ok(result) => result,
             Err(e) => {
-                tracing::error!("Failed to setup client: {}", e);
-                return;
+                anyhow::bail!("Failed to setup client: {}", e);
             }
         };
 
@@ -77,9 +74,7 @@ pub async fn run_client() {
         if args.masq
             && let Err(e) = crate::utils::sys_route::SysRoute::check_iptables_available()
         {
-            eprintln!("❌ Error: {}", e);
-            eprintln!("\nPlease install iptables or run without --masq option.");
-            std::process::exit(1);
+            anyhow::bail!("❌ Error: {e}\nPlease install iptables or run without --masq option.");
         }
     }
 
@@ -92,8 +87,7 @@ pub async fn run_client() {
     let mut dev = match init_device(&device_config, enable_masq).await {
         Ok(d) => d,
         Err(e) => {
-            tracing::error!("Failed to initialize device: {}", e);
-            return;
+            anyhow::bail!("Failed to initialize device: {}", e);
         }
     };
 
@@ -108,12 +102,13 @@ pub async fn run_client() {
 
     // Run main event loop
     run_event_loop(&mut relay_handler, p2p_handler, &mut dev).await;
+    Ok(())
 }
 
 async fn init_device(
     device_config: &HandshakeReplyFrame,
     enable_masq: bool,
-) -> crate::Result<DeviceHandler> {
+) -> anyhow::Result<DeviceHandler> {
     tracing::info!("Initializing device with config: {:?}", device_config);
     let mut dev = DeviceHandler::new();
     let tun_index = dev.run(device_config, enable_masq).await?;

@@ -297,17 +297,17 @@ impl PeerHandler {
     /// **ProbeIPv6**
     /// - update last_active, this is for p2p send_frame healthy checker
     /// - remote address, most of the time this is not changed.
-    pub async fn recv_frame(&mut self) -> crate::Result<Frame> {
+    pub async fn recv_frame(&mut self) -> anyhow::Result<Frame> {
         let inbound_rx = self
             .inbound_rx
             .as_mut()
-            .ok_or("inbound_rx not initialized")?;
+            .ok_or(anyhow::anyhow!("inbound_rx not initialized"))?;
 
         loop {
             let (buf, remote) = inbound_rx
                 .recv()
                 .await
-                .ok_or("recv from peers channel closed")?;
+                .ok_or(anyhow::anyhow!("recv from peers channel closed"))?;
 
             let (frame, _) = Parser::unmarshal(&buf, self.block.as_ref().as_ref())?;
 
@@ -351,18 +351,17 @@ impl PeerHandler {
     ///
     /// secondary try p2p hole punch, if peers is healthy(base on stun_last_active)
     ///
-    pub async fn send_frame(&self, frame: Frame, dest_ip: &str) -> crate::Result<()> {
+    pub async fn send_frame(&self, frame: Frame, dest_ip: &str) -> anyhow::Result<()> {
         let peers = self.peers.read().await;
         let peer = self
             .find_peer_by_ip_locked(&peers, dest_ip)
-            .ok_or("No peer found for destination")?;
+            .ok_or_else(|| anyhow::anyhow!("No peer found for destination"))?;
 
         if peer.remote_addr.is_none() && peer.stun_addr.is_none() {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "Peer {} has no available address (IPv6 or STUN)",
                 peer.identity
-            )
-            .into());
+            ));
         }
 
         let peer_identity = peer.identity.clone();
@@ -378,7 +377,7 @@ impl PeerHandler {
         let outbound_tx = self
             .outbound_tx
             .as_ref()
-            .ok_or("outbound_tx not initialized")?;
+            .ok_or(anyhow::anyhow!("outbound_tx not initialized"))?;
 
         // Attempt 1: Try IPv6 direct connection
         match self
@@ -421,22 +420,19 @@ impl PeerHandler {
             .await
         {
             SendResult::Success => Ok(()),
-            SendResult::Expired(elapsed) => Err(format!(
+            SendResult::Expired(elapsed) => Err(anyhow::anyhow!(
                 "Peer {} STUN connection also expired ({:?} ago)",
-                peer_identity, elapsed
-            )
-            .into()),
-            SendResult::NeverResponded => {
-                Err(format!("Peer {} STUN address never responded", peer_identity).into())
-            }
-            SendResult::NoAddress => {
-                // Both attempts failed
-                Err(format!(
-                    "Failed to send to peer {}: IPv6 unavailable/expired, STUN unavailable/expired",
-                    peer_identity
-                )
-                .into())
-            }
+                peer_identity,
+                elapsed
+            )),
+            SendResult::NeverResponded => Err(anyhow::anyhow!(
+                "Peer {} STUN address never responded",
+                peer_identity
+            )),
+            SendResult::NoAddress => Err(anyhow::anyhow!(
+                "Failed to send to peer {}: IPv6 unavailable/expired, STUN unavailable/expired",
+                peer_identity
+            )),
         }
     }
 
