@@ -5,7 +5,6 @@ pub mod peer;
 pub mod stun;
 mod udp_server;
 
-
 /// Buffer size for outbound/inbound channels (2KB)
 const OUTBOUND_BUFFER_SIZE: usize = 2048;
 
@@ -32,14 +31,6 @@ struct PeerMeta {
     ///
     /// Traffic destined for these ranges will be routed to this peer
     ciders: Vec<String>,
-
-    /// Public IPv6 address of the peer for P2P connection
-    #[allow(unused)]
-    ipv6: String,
-
-    /// UDP port number for P2P communication
-    #[allow(unused)]
-    port: u16,
 
     /// Resolved socket address combining IPv6 and port ([ipv6]:port)
     remote_addr: Option<SocketAddr>,

@@ -44,7 +44,7 @@ pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Get public IPv6 address from external API
-pub async fn get_ipv6() -> Option<String> {
+pub async fn get_ipv6() -> Option<Ipv6Addr> {
     let apis = [
         "https://api64.ipify.org",
         "https://ifconfig.co",
@@ -60,16 +60,12 @@ pub async fn get_ipv6() -> Option<String> {
     None
 }
 
-async fn fetch_ipv6_from_url(url: &str) -> anyhow::Result<String> {
+async fn fetch_ipv6_from_url(url: &str) -> anyhow::Result<Ipv6Addr> {
     use tokio::time::timeout_at;
     let deadline = Instant::now() + Duration::from_secs(5);
     let get = timeout_at(deadline.into(), reqwest::get(url)).await??;
     let response = timeout_at(deadline.into(), get.text()).await??;
 
     let ipv6_str = response.trim();
-
-    // Validate it's a proper IPv6 address
-    ipv6_str.parse::<Ipv6Addr>()?;
-
-    Ok(ipv6_str.to_string())
+    Ok(ipv6_str.parse::<Ipv6Addr>()?)
 }

@@ -33,7 +33,7 @@ pub async fn run_client() -> anyhow::Result<()> {
     let block = crypto::new_block(&crypto_config);
     let crypto_block: Arc<Box<dyn Block>> = Arc::new(block);
 
-    let ipv6 = utils::get_ipv6().await.unwrap_or_default();
+    let ipv6 = utils::get_ipv6().await;
     let stun_result = StunClient::new().discover(P2P_HOLE_PUNCH_PORT).await;
     let stun = match stun_result {
         Ok(result) => Some(StunAddr {

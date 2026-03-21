@@ -7,7 +7,7 @@ use crate::codec::frame::{Frame, PeerDetail, ProbeHolePunchFrame, ProbeIPv6Frame
 use crate::codec::parser::Parser;
 use crate::crypto::Block;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, mpsc};
@@ -95,22 +95,12 @@ impl PeerHandler {
 
     async fn add_peer(&self, p: PeerDetail) {
         let mut peers = self.peers.write().await;
-        let ipv6_remote = self.parse_address(
-            &p.identity,
-            &p.ipv6,
-            p.port,
-            true, // is_ipv6
-        );
+        let ipv6_remote = parse_address(&p.identity, &p.ipv6, p.port);
         if ipv6_remote.is_some() {
             tracing::info!("Added IPv6 peer: {} at {}:{}", p.identity, p.ipv6, p.port);
         }
 
-        let stun_remote = self.parse_address(
-            &p.identity,
-            &p.stun_ip,
-            p.stun_port,
-            false, // is_ipv4
-        );
+        let stun_remote = parse_address(&p.identity, &p.stun_ip, p.stun_port);
         if stun_remote.is_some() {
             tracing::info!(
                 "Added Hole Punch peer: {} at {}:{}",
@@ -128,42 +118,12 @@ impl PeerHandler {
                 identity: p.identity.clone(),
                 private_ip: p.private_ip.clone(),
                 ciders: p.ciders.clone(),
-                ipv6: p.ipv6.clone(),
-                port: p.port,
                 remote_addr: ipv6_remote,
                 stun_addr: stun_remote,
                 last_active: None,
                 stun_last_active: None,
             },
         );
-    }
-
-    fn parse_address(
-        &self,
-        identity: &str,
-        ip: &str,
-        port: u16,
-        is_ipv6: bool,
-    ) -> Option<SocketAddr> {
-        if ip.is_empty() {
-            return None;
-        }
-
-        let addr_str = if is_ipv6 {
-            format!("[{}]:{}", ip, port)
-        } else {
-            format!("{}:{}", ip, port)
-        };
-
-        let addr = match addr_str.parse::<SocketAddr>() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let protocol = if is_ipv6 { "IPv6" } else { "IPv4" };
-                tracing::warn!("Invalid {} address for peer {}: {}", protocol, identity, e);
-                return None;
-            }
-        };
-        Some(addr)
     }
 
     /// insert or update peers
@@ -190,12 +150,7 @@ impl PeerHandler {
                     }
                 }
                 None => {
-                    let ipv6_remote = self.parse_address(
-                        &peer.identity,
-                        &peer.ipv6,
-                        peer.port,
-                        true, // is_ipv6
-                    );
+                    let ipv6_remote = parse_address(&peer.identity, &peer.ipv6, peer.port);
                     if ipv6_remote.is_some() {
                         tracing::info!(
                             "Added IPv6 peer: {} at {}:{}",
@@ -205,12 +160,7 @@ impl PeerHandler {
                         );
                     }
 
-                    let stun_remote = self.parse_address(
-                        &peer.identity,
-                        &peer.stun_ip,
-                        peer.stun_port,
-                        false, // is_ipv4
-                    );
+                    let stun_remote = parse_address(&peer.identity, &peer.stun_ip, peer.stun_port);
                     if stun_remote.is_some() {
                         tracing::info!(
                             "Added Hole Punch peer: {} at {}:{}",
@@ -228,8 +178,6 @@ impl PeerHandler {
                             identity: peer.identity.clone(),
                             private_ip: peer.private_ip.clone(),
                             ciders: peer.ciders.clone(),
-                            ipv6: peer.ipv6.clone(),
-                            port: peer.port,
                             remote_addr: ipv6_remote,
                             stun_addr: stun_remote,
                             last_active: None,
@@ -654,4 +602,20 @@ impl PeerHandler {
             }
         }
     }
+}
+
+fn parse_address(identity: &str, ip: &str, port: u16) -> Option<SocketAddr> {
+    if ip.is_empty() {
+        return None;
+    }
+    let ip = match ip.parse::<IpAddr>() {
+        Ok(ip) => ip,
+        Err(e) => {
+            tracing::warn!("Invalid address for peer {}: {}", identity, e);
+            return None;
+        }
+    };
+
+    let addr = SocketAddr::new(ip, port);
+    Some(addr)
 }

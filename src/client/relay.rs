@@ -5,6 +5,7 @@ use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveF
 use crate::crypto::Block;
 use crate::network::{ConnManage, ConnectionConfig, TCPConnectionConfig, create_connection};
 use crate::utils::{self, StunAddr};
+use std::net::{Ipv6Addr, SocketAddr};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::time::Instant;
@@ -21,7 +22,7 @@ pub struct RelayClientConfig {
     pub outbound_buffer_size: usize,
     pub keep_alive_thresh: u8,
     pub identity: String,
-    pub ipv6: String,
+    pub ipv6: Option<Ipv6Addr>,
     pub port: u16,
     pub stun: Option<StunAddr>,
 }
@@ -56,8 +57,7 @@ impl RelayClient {
         let mut ipv6_update_ticker = interval(Duration::from_secs(300));
         ipv6_update_ticker.tick().await; // Skip first immediate tick
 
-        let mut current_ipv6 = self.cfg.ipv6.clone();
-        let port = self.cfg.port;
+        let mut current_ipv6: Option<Ipv6Addr> = self.cfg.ipv6;
         let stun = self.cfg.stun.clone();
 
         let mut last_active = Instant::now();
@@ -70,8 +70,7 @@ impl RelayClient {
                         .keep_alive(
                             &mut conn,
                             &mut keepalive_wait,
-                            &current_ipv6,
-                            port,
+                            current_ipv6.map(|ipv6| SocketAddr::new(ipv6.into(), self.cfg.port)),
                             stun.as_ref(),
                             last_active,
                             timeout_secs,
@@ -86,8 +85,12 @@ impl RelayClient {
                 _ = ipv6_update_ticker.tick() => {
                     tracing::debug!("ipv6 update tick");
                     if let Some(new_ipv6) = utils::get_ipv6().await {
-                        tracing::info!("IPv6 address updated: {} -> {}", current_ipv6, new_ipv6);
-                        current_ipv6 = new_ipv6.clone();
+                        let curr_display = match current_ipv6 {
+                            None => "None".to_string(),
+                            Some(ipv6) => ipv6.to_string(),
+                        };
+                        tracing::info!("IPv6 address updated: {curr_display} -> {new_ipv6}");
+                        current_ipv6 = Some(new_ipv6);
                     } else {
                         tracing::debug!("Failed to retrieve IPv6 address during update check");
                     }
@@ -164,8 +167,7 @@ impl RelayClient {
         &mut self,
         conn: &mut Box<dyn ConnManage + 'static>,
         keepalive_wait: &mut u8,
-        current_ipv6: &str,
-        port: u16,
+        current_ipv6: Option<SocketAddr>,
         stun: Option<&StunAddr>,
         last_active: Instant,
         timeout_secs: u64,
@@ -178,8 +180,10 @@ impl RelayClient {
         let keepalive_frame = Frame::KeepAlive(KeepAliveFrame {
             name: "".to_string(),
             identity: self.cfg.identity.clone(),
-            ipv6: current_ipv6.to_string(),
-            port,
+            ipv6: current_ipv6
+                .map(|ipv6| ipv6.ip().to_string())
+                .unwrap_or_default(),
+            port: current_ipv6.map(|ipv6| ipv6.port()).unwrap_or_default(),
             #[allow(clippy::unwrap_or_default)]
             stun_ip: stun
                 .as_ref()
@@ -280,7 +284,7 @@ impl RelayHandler {
                 mask: reply.mask.clone(),
                 gateway: reply.gateway.clone(),
                 ciders: reply.ciders.clone(),
-                ipv6: cfg.ipv6.clone(),
+                ipv6: cfg.ipv6.map(|ipv6| ipv6.to_string()).unwrap_or_default(),
                 port: cfg.port,
                 stun_ip: cfg
                     .stun
@@ -397,7 +401,7 @@ async fn run_client_session(
 pub async fn new_relay_handler(
     args: &Args,
     block: Arc<Box<dyn Block>>,
-    ipv6: String,
+    ipv6: Option<Ipv6Addr>,
     port: u16,
     stun: Option<StunAddr>,
 ) -> anyhow::Result<(RelayHandler, HandshakeReplyFrame)> {
