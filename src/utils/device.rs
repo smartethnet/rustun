@@ -1,12 +1,12 @@
+use crate::codec::frame::{HandshakeReplyFrame, PeerDetail};
+use crate::utils::sys_route::SysRoute;
+#[allow(unused_imports)]
+use crate::utils::sys_route::{ip_to_network, mask_to_prefix_length};
+use std::collections::{HashMap, HashSet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 #[allow(unused_imports)]
 use tun::AbstractDevice;
-use crate::codec::frame::{HandshakeReplyFrame, PeerDetail};
-use crate::utils::sys_route::SysRoute;
-use std::collections::{HashSet, HashMap};
-#[allow(unused_imports)]
-use crate::utils::sys_route::{ip_to_network, mask_to_prefix_length};
 
 const DEFAULT_MTU: u16 = 1430;
 
@@ -43,7 +43,11 @@ impl Device {
         }
     }
 
-    pub async fn run(&mut self, ready: oneshot::Sender<Option<i32>>, name: oneshot::Sender<Option<String>>) -> anyhow::Result<()> {
+    pub async fn run(
+        &mut self,
+        ready: oneshot::Sender<Option<i32>>,
+        name: oneshot::Sender<Option<String>>,
+    ) -> anyhow::Result<()> {
         let mut config = tun::Configuration::default();
         config
             .address(self.ip.clone())
@@ -67,7 +71,7 @@ impl Device {
         // Get TUN interface index (Windows only)
         #[cfg(target_os = "windows")]
         let tun_index = dev.tun_index().ok();
-        
+
         #[cfg(not(target_os = "windows"))]
         let tun_index: Option<i32> = None;
 
@@ -77,7 +81,7 @@ impl Device {
             let interface_name = dev.tun_name().ok();
             let _ = name.send(interface_name);
         }
-        
+
         #[cfg(not(target_os = "linux"))]
         let _ = name.send(None);
 
@@ -89,12 +93,12 @@ impl Device {
                     let amount = match amount {
                         Ok(amount) => amount,
                         Err(e) => {
-                            tracing::error!("read device fail: {:?}", e);
+                            tracing::error!("read device fail: {e:?}");
                             continue;
                         }
                     };
                     if let Err(e) = self.inbound_tx.send(buf[0..amount].to_vec()).await {
-                        tracing::error!("device => server fail: {}", e);
+                        tracing::error!("device => server fail: {e}");
                     }
                 }
                 packet = self.outbound_rx.recv() => {
@@ -102,7 +106,7 @@ impl Device {
                         tracing::debug!("server => device {} bytes", packet.len());
                         let result = dev.write(packet.as_slice()).await;
                         if let Err(e) = result {
-                            tracing::error!("write device fail: {:?}", e);
+                            tracing::error!("write device fail: {e:?}");
                         }
                     }
                 }
@@ -140,7 +144,11 @@ impl DeviceHandler {
         }
     }
 
-    pub async fn run(&mut self, cfg: &HandshakeReplyFrame, enable_masq: bool) -> anyhow::Result<Option<i32>> {
+    pub async fn run(
+        &mut self,
+        cfg: &HandshakeReplyFrame,
+        enable_masq: bool,
+    ) -> anyhow::Result<Option<i32>> {
         let (inbound_tx, inbound_rx) = mpsc::channel(1000);
         let (outbound_tx, outbound_rx) = mpsc::channel(1000);
         self.inbound_rx = Some(inbound_rx);
@@ -149,17 +157,20 @@ impl DeviceHandler {
         self.mask = cfg.mask.clone();
         self.local_ciders = cfg.ciders.clone();
 
-        let mut dev = Device::new(cfg.private_ip.clone(),
-                                  cfg.mask.clone(),
-                                  DEFAULT_MTU,
-                                  inbound_tx, outbound_rx);
+        let mut dev = Device::new(
+            cfg.private_ip.clone(),
+            cfg.mask.clone(),
+            DEFAULT_MTU,
+            inbound_tx,
+            outbound_rx,
+        );
         let (ready_tx, ready_rx) = oneshot::channel();
         let (name_tx, name_rx) = oneshot::channel();
         tokio::spawn(async move {
             let res = dev.run(ready_tx, name_tx).await;
             match res {
                 Ok(_) => (),
-                Err(e) => tracing::error!("device handler fail: {:?}", e),
+                Err(e) => tracing::error!("device handler fail: {e:?}"),
             }
         });
 
@@ -170,13 +181,12 @@ impl DeviceHandler {
             self.interface_name = Some(name);
         }
 
-
         if enable_masq {
             if let Err(e) = self.enable_masquerade() {
-                tracing::error!("Failed to enable MASQUERADE: {:?}", e);
+                tracing::error!("Failed to enable MASQUERADE: {e:?}");
             }
             if let Err(e) = self.enable_snat() {
-                tracing::warn!("Failed to enable SNAT: {:?}", e);
+                tracing::warn!("Failed to enable SNAT: {e:?}");
             }
         }
 
@@ -210,7 +220,7 @@ impl DeviceHandler {
                 return Err(anyhow::anyhow!("device handler send none"));
             }
         };
-        self.tx_bytes+=packet.len();
+        self.tx_bytes += packet.len();
         tracing::debug!("device => server outbound tx len: {}", packet.len());
         let result = outbound_tx.send(packet).await;
         match result {
@@ -226,45 +236,53 @@ impl DeviceHandler {
 
     pub async fn reload_route(&mut self, new_routes: Vec<PeerDetail>) {
         let sys_route = SysRoute::new();
-        
+
         let mut old_ciders: HashSet<String> = HashSet::new();
         for route in &self.peer_details {
             for cidr in &route.ciders {
                 old_ciders.insert(cidr.clone());
             }
         }
-        
+
         let mut new_ciders: HashSet<String> = HashSet::new();
         for route in &new_routes {
             for cidr in &route.ciders {
                 new_ciders.insert(cidr.clone());
             }
         }
-        
-        tracing::info!("Reloading routes: old={}, new={}", old_ciders.len(), new_ciders.len());
-        
+
+        tracing::info!(
+            "Reloading routes: old={}, new={}",
+            old_ciders.len(),
+            new_ciders.len()
+        );
+
         // Find routes to delete (in old but not in new)
         let to_delete: Vec<String> = old_ciders.difference(&new_ciders).cloned().collect();
-        
+
         // Find routes to add (in new but not in old)
         let to_add: Vec<String> = new_ciders.difference(&old_ciders).cloned().collect();
-        
+
         // Delete old routes
         for cidr in to_delete {
-            tracing::info!("Deleting route: {}", cidr);
-            if let Err(e) = sys_route.del(vec![cidr.clone()], self.private_ip.clone(), self.tun_index) {
-                tracing::error!("Failed to delete route {}: {}", cidr, e);
+            tracing::info!("Deleting route: {cidr}");
+            if let Err(e) =
+                sys_route.del(vec![cidr.clone()], self.private_ip.clone(), self.tun_index)
+            {
+                tracing::error!("Failed to delete route {cidr}: {e}");
             }
         }
-        
+
         // Add new routes
         for cidr in to_add {
-            tracing::info!("Adding route: {} via {}", cidr, self.private_ip);
-            if let Err(e) = sys_route.add(vec![cidr.clone()], self.private_ip.clone(), self.tun_index) {
-                tracing::error!("Failed to add route {}: {}", cidr, e);
+            tracing::info!("Adding route: {cidr} via {}", self.private_ip);
+            if let Err(e) =
+                sys_route.add(vec![cidr.clone()], self.private_ip.clone(), self.tun_index)
+            {
+                tracing::error!("Failed to add route {cidr}: {e}");
             }
         }
-        
+
         // Update stored routes
         self.peer_details = new_routes;
 
@@ -275,7 +293,7 @@ impl DeviceHandler {
     /// Uses source network address instead of interface name for better reliability
     pub fn enable_masquerade(&mut self) -> anyhow::Result<()> {
         let cidr = self.ip_mask_to_cidr(&self.private_ip, &self.mask)?;
-        
+
         let sys_route = SysRoute::new();
         sys_route.enable_masquerade_by_source(&cidr)?;
         Ok(())
@@ -284,7 +302,7 @@ impl DeviceHandler {
     /// Disable MASQUERADE (NAT) for VPN interface (Linux only)
     pub fn disable_masquerade(&mut self) -> anyhow::Result<()> {
         let cidr = self.ip_mask_to_cidr(&self.private_ip, &self.mask)?;
-        
+
         let sys_route = SysRoute::new();
         sys_route.disable_masquerade_by_source(&cidr)?;
         Ok(())
@@ -302,10 +320,13 @@ impl DeviceHandler {
     /// This makes packets from local ciders appear as coming from virtual IP
     pub fn enable_snat(&mut self) -> anyhow::Result<()> {
         let sys_route = SysRoute::new();
-        
+
         for cidr in &self.local_ciders {
             sys_route.enable_snat_for_local_network(cidr, "", &self.private_ip)?;
-            tracing::info!("Enabled SNAT for local network {} -> {}", cidr, self.private_ip);
+            tracing::info!(
+                "Enabled SNAT for local network {cidr} -> {}",
+                self.private_ip
+            );
         }
         Ok(())
     }
@@ -313,7 +334,7 @@ impl DeviceHandler {
     /// Disable SNAT for local network segments (Linux only)
     pub fn disable_snat(&mut self) -> anyhow::Result<()> {
         let sys_route = SysRoute::new();
-        
+
         for cidr in &self.local_ciders {
             sys_route.disable_snat_for_local_network(cidr, "", &self.private_ip)?;
         }
@@ -324,27 +345,30 @@ impl DeviceHandler {
     /// This should be called after receiving HandshakeReplyFrame
     /// Maps destination IPs from mapped CIDR to real CIDR using iptables NETMAP
     #[cfg(target_os = "linux")]
-    pub fn setup_cidr_mapping(&mut self, cidr_mapping: &HashMap<String, String>) -> anyhow::Result<()> {
+    pub fn setup_cidr_mapping(
+        &mut self,
+        cidr_mapping: &HashMap<String, String>,
+    ) -> anyhow::Result<()> {
         let sys_route = SysRoute::new();
-        
+
         for (mapped_cidr, real_cidr) in cidr_mapping {
             // Add DNAT rule (iptables will check if it already exists)
             if let Err(e) = sys_route.enable_cidr_dnat(mapped_cidr, real_cidr) {
-                tracing::error!(
-                    "Failed to add DNAT rule for {} -> {}: {}", 
-                    mapped_cidr, real_cidr, e
-                );
+                tracing::error!("Failed to add DNAT rule for {mapped_cidr} -> {real_cidr}: {e}");
                 return Err(e);
             }
-            
-            tracing::info!("Added DNAT rule for CIDR mapping: {} -> {}", mapped_cidr, real_cidr);
+
+            tracing::info!("Added DNAT rule for CIDR mapping: {mapped_cidr} -> {real_cidr}");
         }
-        
+
         Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn setup_cidr_mapping(&mut self, _cidr_mapping: &HashMap<String, String>) -> anyhow::Result<()> {
+    pub fn setup_cidr_mapping(
+        &mut self,
+        _cidr_mapping: &HashMap<String, String>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }

@@ -80,7 +80,7 @@ impl Block for ChaCha20Poly1305Block {
         let ciphertext = self
             .cipher
             .encrypt(nonce, data.as_ref())
-            .map_err(|e| anyhow::anyhow!("ChaCha20-Poly1305 encryption failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("ChaCha20-Poly1305 encryption failed: {e}"))?;
 
         // Replace data with: nonce || ciphertext (ciphertext already includes auth tag)
         data.clear();
@@ -115,7 +115,7 @@ impl Block for ChaCha20Poly1305Block {
         let plaintext = self
             .cipher
             .decrypt(nonce, ciphertext)
-            .map_err(|e| anyhow::anyhow!("ChaCha20-Poly1305 decryption failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("ChaCha20-Poly1305 decryption failed: {e}"))?;
 
         // Replace data with plaintext
         data.clear();

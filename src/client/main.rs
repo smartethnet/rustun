@@ -18,7 +18,7 @@ pub async fn run_client() -> anyhow::Result<()> {
     let args = Args::parse();
 
     if let Err(e) = utils::init_tracing() {
-        anyhow::bail!("Failed to initialize logging: {}", e);
+        anyhow::bail!("Failed to initialize logging: {e}");
     }
 
     log_startup_banner(&args);
@@ -27,7 +27,7 @@ pub async fn run_client() -> anyhow::Result<()> {
     let crypto_config = match crypto::parse_crypto_config(&args.crypto) {
         Ok(cfg) => cfg,
         Err(e) => {
-            anyhow::bail!("Invalid crypto configuration: {}", e);
+            anyhow::bail!("Invalid crypto configuration: {e}");
         }
     };
     let block = crypto::new_block(&crypto_config);
@@ -48,11 +48,10 @@ pub async fn run_client() -> anyhow::Result<()> {
         match new_relay_handler(&args, crypto_block.clone(), ipv6, P2P_UDP_PORT, stun).await {
             Ok(result) => result,
             Err(e) => {
-                anyhow::bail!("Failed to setup client: {}", e);
+                anyhow::bail!("Failed to setup client: {e}");
             }
         };
 
-    // Initialize P2P handler if enabled (wrapped in Arc<RwLock<>> for sharing with device packet task)
     let p2p_handler = if args.enable_p2p {
         tracing::info!("P2P mode enabled");
 
@@ -86,7 +85,7 @@ pub async fn run_client() -> anyhow::Result<()> {
     let mut dev = match init_device(&device_config, enable_masq).await {
         Ok(d) => d,
         Err(e) => {
-            anyhow::bail!("Failed to initialize device: {}", e);
+            anyhow::bail!("Failed to initialize device: {e}");
         }
     };
 
@@ -94,7 +93,7 @@ pub async fn run_client() -> anyhow::Result<()> {
     if let Some(http_port) = args.http_port {
         tokio::spawn(async move {
             if let Err(e) = server::start(http_port).await {
-                tracing::error!("HTTP server error: {}", e);
+                tracing::error!("HTTP server error: {e}");
             }
         });
     }
@@ -123,7 +122,7 @@ async fn init_device(
     if !device_config.cider_mapping.is_empty()
         && let Err(e) = dev.setup_cidr_mapping(&device_config.cider_mapping)
     {
-        tracing::error!("Failed to setup CIDR mapping DNAT rules: {}", e);
+        tracing::error!("Failed to setup CIDR mapping DNAT rules: {e}");
         // Don't fail initialization, just log the error
         // This allows the client to continue even if DNAT setup fails
     }
@@ -196,7 +195,7 @@ async fn run_event_loop(
                 };
                 tracing::debug!("P2P -> Device: {} bytes", data_frame.payload.len());
                 if let Err(e) = dev.send(data_frame.payload).await {
-                    tracing::error!("Failed to write to device: {}", e);
+                    tracing::error!("Failed to write to device: {e}");
                 }
             }
 
@@ -250,7 +249,7 @@ async fn handle_device_packet(
     // Fallback to relay (or direct if no P2P)
     let frame = Frame::Data(DataFrame { payload: packet });
     if let Err(e) = RelayHandler::send_frame(relay_outbound, frame).await {
-        tracing::error!("Failed to send via relay: {}", e);
+        tracing::error!("Failed to send via relay: {e}");
     }
 }
 
@@ -264,7 +263,7 @@ async fn handle_relay_frame(
         Frame::Data(data_frame) => {
             tracing::debug!("Relay -> Device: {} bytes", data_frame.payload.len());
             if let Err(e) = dev.send(data_frame.payload).await {
-                tracing::error!("Failed to write to device: {}", e);
+                tracing::error!("Failed to write to device: {e}");
             }
         }
         Frame::KeepAlive(keepalive) => {

@@ -104,11 +104,11 @@ impl Listener for TCPListener {
                     if let Some(tx) = &self.on_conn_tx
                         && let Err(e) = tx.send(Box::new(conn)).await
                     {
-                        tracing::warn!("Failed to send new connection: {}", e);
+                        tracing::warn!("Failed to send new connection: {e}");
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Accept error: {}", e);
+                    tracing::error!("Accept error: {e}");
                     return Err(e);
                 }
             }

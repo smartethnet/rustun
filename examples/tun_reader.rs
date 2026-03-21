@@ -122,7 +122,7 @@ async fn main() {
             }
         }
         Err(e) => {
-            eprintln!("❌ STUN Discovery Failed: {}", e);
+            eprintln!("❌ STUN Discovery Failed: {e}");
             eprintln!();
             eprintln!("Possible reasons:");
             eprintln!("  - No internet connection");

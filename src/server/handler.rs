@@ -192,7 +192,7 @@ impl Handler {
                     if let Some(frame) = frame {
                         tracing::debug!("send frame {}", frame);
                         if let Err(e) = self.conn.write_frame(frame).await {
-                            tracing::debug!("connection closed with {:?}", e);
+                            tracing::debug!("connection closed with {e:?}");
                             break;
                         };
                     }
@@ -350,7 +350,7 @@ impl Handler {
         });
 
         if let Err(e) = self.outbound_tx.send(reply_frame).await {
-            tracing::error!("reply keepalive frame failed with {:?}", e);
+            tracing::error!("reply keepalive frame failed with {e:?}");
         }
     }
 }

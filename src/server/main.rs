@@ -12,12 +12,12 @@ pub async fn run_server() -> anyhow::Result<()> {
     let cfg = config::load_main(args.get(1).unwrap_or(&"server.toml".to_string())).unwrap();
 
     if let Err(e) = utils::init_tracing() {
-        anyhow::bail!("Failed to initialize logging: {}", e);
+        anyhow::bail!("Failed to initialize logging: {e}");
     }
 
     let routes_file = cfg.route_config.routes_file.clone();
     let client_routes = config::load_routes(routes_file.as_str()).unwrap();
-    tracing::debug!("config: {:?}, routes: {:?}", cfg, client_routes);
+    tracing::debug!("config: {cfg:?}, routes: {client_routes:?}");
 
     let client_manager = Arc::new(ClientManager::new());
     client_manager.add_clients_config(client_routes.clone());
@@ -44,7 +44,7 @@ pub async fn run_server() -> anyhow::Result<()> {
         let agent_clone = agent.clone();
         tokio::spawn(async move {
             if let Err(e) = agent_clone.start().await {
-                tracing::error!("Conf-agent error: {:?}", e);
+                tracing::error!("Conf-agent error: {e:?}");
             }
         });
     }
@@ -56,7 +56,7 @@ pub async fn run_server() -> anyhow::Result<()> {
         Arc::new(block),
     );
     if let Err(e) = server.run().await {
-        anyhow::bail!("Server error: {}", e);
+        anyhow::bail!("Server error: {e}");
     }
     Ok(())
 }

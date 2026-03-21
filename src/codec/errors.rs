@@ -55,7 +55,7 @@ impl Display for FrameError {
         match self {
             FrameError::TooShort => "stream ended early".fmt(fmt),
             FrameError::Invalid => "invalid frame".fmt(fmt),
-            FrameError::DecryptionFailed(e) => write!(fmt, "decryption failed: {}", e),
+            FrameError::DecryptionFailed(e) => write!(fmt, "decryption failed: {e}"),
         }
     }
 }

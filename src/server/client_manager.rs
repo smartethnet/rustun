@@ -46,7 +46,7 @@ impl ClientManager {
             .unwrap_or_else(|e| e.into_inner());
 
         for client in clients {
-            tracing::debug!("add client config {:?}", client);
+            tracing::debug!("add client config {client:?}");
             clients_map.insert(client.identity.clone(), client.clone());
             cluster_map
                 .entry(client.cluster.clone())
@@ -57,14 +57,20 @@ impl ClientManager {
 
     pub fn rewrite_clients_config(&self, clients: Vec<ClientConfig>) {
         let mut clients_map = self.clients.write().unwrap_or_else(|e| e.into_inner());
-        let mut cluster_map = self.cluster_clients.write().unwrap_or_else(|e| e.into_inner());
+        let mut cluster_map = self
+            .cluster_clients
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         let mut new_clients_map = HashMap::new();
         let mut new_cluster_map: HashMap<String, Vec<ClientConfig>> = HashMap::new();
         for client in clients {
-            tracing::debug!("add client config {:?}", client);
+            tracing::debug!("add client config {client:?}");
             new_clients_map.insert(client.identity.clone(), client.clone());
-            new_cluster_map.entry(client.cluster.clone()).or_default().push(client.clone());
+            new_cluster_map
+                .entry(client.cluster.clone())
+                .or_default()
+                .push(client.clone());
         }
 
         *clients_map = new_clients_map;
@@ -95,7 +101,6 @@ impl ClientManager {
             })
             .unwrap_or_default()
     }
-
 
     pub fn get_client(&self, identity: &String) -> Option<ClientConfig> {
         self.clients

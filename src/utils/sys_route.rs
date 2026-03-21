@@ -55,7 +55,7 @@ impl SysRoute {
                     1. Install iptables: sudo apt-get install iptables (Debian/Ubuntu) or sudo yum install iptables (RHEL/CentOS)\n\
                     2. Run without --masq option"
             )),
-            Err(e) => Err(anyhow::anyhow!("Failed to check iptables: {}", e)),
+            Err(e) => Err(anyhow::anyhow!("Failed to check iptables: {e}")),
         }
     }
 
@@ -107,7 +107,7 @@ impl SysRoute {
         let output = Command::new("ip")
             .args(["route", "add", dst, "via", gateway])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute ip command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute ip command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -126,7 +126,7 @@ impl SysRoute {
         let output = Command::new("ip")
             .args(["route", "del", dst, "via", gateway])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute ip command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute ip command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -145,7 +145,7 @@ impl SysRoute {
         let output = Command::new("route")
             .args(["-n", "add", "-net", dst, gateway])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -164,7 +164,7 @@ impl SysRoute {
         let output = Command::new("route")
             .args(["-n", "delete", "-net", dst, gateway])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -200,7 +200,7 @@ impl SysRoute {
         let output = Command::new("route")
             .args(&args)
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -233,7 +233,7 @@ impl SysRoute {
         let output = Command::new("route")
             .args(&["delete", &network, "mask", &mask])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute route command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -315,7 +315,7 @@ impl SysRoute {
                 "MASQUERADE",
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables check command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables check command: {e}"))?;
 
         if check_output.status.success() {
             tracing::debug!("MASQUERADE rule already exists for source {}", source_cidr);
@@ -332,7 +332,7 @@ impl SysRoute {
                 "-j", "MASQUERADE",
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -356,7 +356,7 @@ impl SysRoute {
                 "-j", "MASQUERADE",
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -402,7 +402,7 @@ impl SysRoute {
                 virtual_ip,
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables check command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables check command: {e}"))?;
 
         if check_output.status.success() {
             tracing::debug!(
@@ -428,7 +428,7 @@ impl SysRoute {
                 virtual_ip,
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -457,7 +457,7 @@ impl SysRoute {
                 "--to-source", virtual_ip,
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -538,7 +538,7 @@ impl SysRoute {
                         Please install iptables and ensure your kernel supports NETMAP target.\n\
                         NETMAP requires Linux kernel 2.6.32+ with netfilter NETMAP module.")
                 } else {
-                    anyhow::anyhow!("Failed to execute iptables command: {}", e)
+                    anyhow::anyhow!("Failed to execute iptables command: {e}")
                 }
             })?;
 
@@ -578,7 +578,7 @@ impl SysRoute {
                 "--to", real_cidr,
             ])
             .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to execute iptables command: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

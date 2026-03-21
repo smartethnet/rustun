@@ -275,7 +275,7 @@ impl PeerHandler {
             UDPServer::new(P2P_UDP_PORT, P2P_HOLE_PUNCH_PORT, inbound_tx, output_rx);
         tokio::spawn(async move {
             if let Err(e) = udp_server.serve().await {
-                tracing::error!("PeerService error: {}", e);
+                tracing::error!("PeerService error: {e}");
             }
         });
         let (new_pears_tx, new_pears_rx) = mpsc::channel(1024);
@@ -330,7 +330,7 @@ impl PeerHandler {
                 }
                 Some(sf) = send_frame.0.recv() => {
                     if let Err(e) = self.send_frame(sf.frame, &sf.dst).await {
-                        tracing::warn!("send_frame failed: {}", e);
+                        tracing::warn!("send_frame failed: {e}");
                     }
                 }
                 Some(reply_tx) = get_status.0.recv() => {

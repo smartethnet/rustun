@@ -113,7 +113,7 @@ impl RelayClient {
 
                     let now = Instant::now();
                     if let Err(e) = conn.write_frame(frame.unwrap()).await {
-                        tracing::error!("device => server write frame: {}", e);
+                        tracing::error!("device => server write frame: {e}");
                     }
                     tracing::debug!("send to server cost {}", now.elapsed().as_millis());
                 }
@@ -134,7 +134,7 @@ impl RelayClient {
         *last_active = Instant::now();
         match result {
             Ok(frame) => {
-                tracing::debug!("received frame {}", frame);
+                tracing::debug!("received frame {frame}");
                 let beg = Instant::now();
                 match frame {
                     Frame::KeepAlive(keepalive) => {
@@ -142,13 +142,13 @@ impl RelayClient {
 
                         tracing::debug!("Received keepalive from server");
                         if let Err(e) = self.inbound_tx.send(Frame::KeepAlive(keepalive)).await {
-                            tracing::error!("Failed to forward keepalive: {}", e);
+                            tracing::error!("Failed to forward keepalive: {e}");
                             return ControlFlow::Break(());
                         }
                     }
                     Frame::Data(data) => {
                         if let Err(e) = self.inbound_tx.send(Frame::Data(data)).await {
-                            tracing::error!("server => device inbound: {}", e);
+                            tracing::error!("server => device inbound: {e}");
                             return ControlFlow::Break(());
                         }
                     }
@@ -157,7 +157,7 @@ impl RelayClient {
                 tracing::debug!("handle frame cost {}", beg.elapsed().as_millis());
             }
             Err(e) => {
-                tracing::error!("Read error: {}", e);
+                tracing::error!("Read error: {e}");
                 return ControlFlow::Break(());
             }
         }
@@ -199,7 +199,7 @@ impl RelayClient {
                 *keepalive_wait = 0;
             }
             Err(e) => {
-                tracing::error!("Failed to send keepalive: {}", e);
+                tracing::error!("Failed to send keepalive: {e}");
                 *keepalive_wait += 1;
                 if *keepalive_wait > self.cfg.keep_alive_thresh {
                     tracing::error!("keepalive max retry, close connection");
@@ -337,7 +337,7 @@ impl RelayHandler {
             Ok(()) => Ok(()),
             Err(e) => {
                 // self.metrics.tx_error += 1;
-                Err(anyhow::anyhow!("device=> server fail {:?}", e))
+                Err(anyhow::anyhow!("device=> server fail {e:?}"))
             }
         }
     }
@@ -369,7 +369,7 @@ async fn run_client_session(
     let mut conn = match client.connect().await {
         Ok(socket) => socket,
         Err(e) => {
-            tracing::error!("connect error: {}", e);
+            tracing::error!("connect error: {e}");
             return;
         }
     };
@@ -377,7 +377,7 @@ async fn run_client_session(
     let frame = match client.handshake(&mut conn).await {
         Ok(frame) => frame,
         Err(e) => {
-            tracing::warn!("handshake fail {:?}, reconnecting", e);
+            tracing::warn!("handshake fail {e:?}, reconnecting");
             return;
         }
     };
@@ -391,12 +391,12 @@ async fn run_client_session(
     }
 
     if let Err(e) = on_ready.send(frame.clone()).await {
-        tracing::error!("on ready send fail: {}", e);
+        tracing::error!("on ready send fail: {e}");
     }
 
     let result = client.run(conn).await;
 
-    tracing::warn!("run client fail {:?}, reconnecting", result);
+    tracing::warn!("run client fail {result:?}, reconnecting");
 }
 
 pub async fn new_relay_handler(

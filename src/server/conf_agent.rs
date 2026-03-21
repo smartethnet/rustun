@@ -61,10 +61,10 @@ impl ConfAgent {
 
         // Initial fetch and report
         if let Err(e) = self.fetch_and_update_routes().await {
-            tracing::error!("Failed to fetch routes: {:?}", e);
+            tracing::error!("Failed to fetch routes: {e:?}");
         }
         if let Err(e) = self.report_connections().await {
-            tracing::error!("Failed to report connections: {:?}", e);
+            tracing::error!("Failed to report connections: {e:?}");
         }
 
         // Periodic tasks: route fetching and connection reporting
@@ -75,12 +75,12 @@ impl ConfAgent {
             tokio::select! {
                 _ = route_ticker.tick() => {
                     if let Err(e) = self.fetch_and_update_routes().await {
-                        tracing::error!("Failed to fetch routes: {:?}", e);
+                        tracing::error!("Failed to fetch routes: {e:?}");
                     }
                 }
                 _ = report_ticker.tick() => {
                     if let Err(e) = self.report_connections().await {
-                        tracing::error!("Failed to report connections: {:?}", e);
+                        tracing::error!("Failed to report connections: {e:?}");
                     }
                 }
             }

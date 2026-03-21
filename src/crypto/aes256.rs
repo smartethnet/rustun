@@ -81,7 +81,7 @@ impl Block for Aes256Block {
         let ciphertext = self
             .cipher
             .encrypt(nonce, data.as_ref())
-            .map_err(|e| anyhow::anyhow!("AES-256-GCM encryption failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("AES-256-GCM encryption failed: {e}"))?;
 
         // Replace data with: nonce || ciphertext (ciphertext already includes auth tag)
         data.clear();
@@ -114,7 +114,7 @@ impl Block for Aes256Block {
         let plaintext = self
             .cipher
             .decrypt(nonce, ciphertext)
-            .map_err(|e| anyhow::anyhow!("AES-256-GCM decryption failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("AES-256-GCM decryption failed: {e}"))?;
 
         // Replace data with plaintext
         data.clear();
