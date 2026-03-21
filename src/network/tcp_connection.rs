@@ -2,7 +2,7 @@ use crate::codec::frame::Frame;
 use crate::codec::parser::Parser;
 use crate::crypto::Block;
 use crate::crypto::plain::PlainBlock;
-use crate::network::Connection;
+use crate::network::{ConnManage, ConnRead, ConnWrite, HasPeerAddr};
 use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
 use std::io;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::time::{timeout, Instant};
+use tokio::time::{Instant, timeout};
 
 /// Default timeout for read operations
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(20);
@@ -114,15 +114,7 @@ impl TcpConnection {
 }
 
 #[async_trait]
-impl Connection for TcpConnection {
-    /// Read a complete frame from the connection
-    ///
-    /// Reads data from the socket into a buffer and attempts to parse
-    /// complete frames. Blocks until a frame is available or error occurs.
-    ///
-    /// # Returns
-    /// - `Ok(Frame)` - Successfully received frame
-    /// - `Err` - Connection error, EOF, parse error, or timeout
+impl ConnRead for TcpConnection {
     async fn read_frame(&mut self) -> crate::Result<Frame> {
         let deadline = Instant::now() + self.read_timeout;
 
@@ -139,10 +131,8 @@ impl Connection for TcpConnection {
 
             let remaining = deadline.saturating_duration_since(Instant::now());
 
-            let read_result = timeout(
-                remaining,
-                self.socket.read_buf(&mut self.input_stream)
-            ).await;
+            let read_result =
+                timeout(remaining, self.socket.read_buf(&mut self.input_stream)).await;
 
             match read_result {
                 Ok(Ok(0)) => {
@@ -154,23 +144,16 @@ impl Connection for TcpConnection {
                 }
                 Ok(Ok(n)) => {
                     tracing::debug!("read {} bytes", n)
-                },
+                }
                 Ok(Err(e)) => return Err(e.into()),
                 Err(_) => return Err("read timeout".into()),
             }
         }
     }
+}
 
-    /// Write a frame to the connection
-    ///
-    /// Marshals the frame with encryption and sends it over the socket.
-    ///
-    /// # Arguments
-    /// - `frame` - Frame to send
-    ///
-    /// # Returns
-    /// - `Ok(())` - Frame sent successfully
-    /// - `Err` - Marshal error, write error, or timeout
+#[async_trait]
+impl ConnWrite for TcpConnection {
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()> {
         let result = Parser::marshal(frame, self.block.as_ref());
         let buf = match result {
@@ -180,15 +163,12 @@ impl Connection for TcpConnection {
             }
         };
 
-        // Write with timeout
-        let write_result = timeout(
-            self.write_timeout,
-            async {
-                self.socket.write_all(buf.as_slice()).await?;
-                self.socket.flush().await?;
-                Ok::<(), std::io::Error>(())
-            }
-        ).await;
+        let write_result = timeout(self.write_timeout, async {
+            self.socket.write_all(buf.as_slice()).await?;
+            self.socket.flush().await?;
+            Ok::<(), std::io::Error>(())
+        })
+        .await;
 
         match write_result {
             Ok(Ok(())) => Ok(()),
@@ -197,13 +177,15 @@ impl Connection for TcpConnection {
         }
     }
 
-    /// Close the connection gracefully
     async fn close(&mut self) {
         let _ = self.socket.shutdown().await;
     }
+}
 
-    /// Get the peer's socket address
+impl HasPeerAddr for TcpConnection {
     fn peer_addr(&mut self) -> io::Result<SocketAddr> {
         self.socket.peer_addr()
     }
 }
+
+impl ConnManage for TcpConnection {}

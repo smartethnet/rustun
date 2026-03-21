@@ -1,13 +1,13 @@
 use crate::client::Args;
-use crate::client::prettylog::log_handshake_success;
 use crate::client::http::SelfInfo;
+use crate::client::prettylog::log_handshake_success;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame};
 use crate::crypto::Block;
-use crate::network::{create_connection, Connection, ConnectionConfig, TCPConnectionConfig};
+use crate::network::{ConnectionConfig, ConnManage, TCPConnectionConfig, create_connection};
 use crate::utils;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tokio::time::{Duration, interval};
 
 const CHANNEL_BUFFER_SIZE: usize = 1000;
@@ -48,10 +48,10 @@ impl RelayClient {
         }
     }
 
-    pub async fn run(&mut self, mut conn: Box<dyn Connection>) -> crate::Result<()> {
+    pub async fn run(&mut self, mut conn: Box<dyn ConnManage>) -> crate::Result<()> {
         let mut keepalive_ticker = interval(self.cfg.keepalive_interval);
         let mut keepalive_wait: u8 = 0;
-        
+
         // IPv6 update interval (check every 5 minutes)
         let mut ipv6_update_ticker = interval(Duration::from_secs(300));
         ipv6_update_ticker.tick().await; // Skip first immediate tick
@@ -62,7 +62,8 @@ impl RelayClient {
         let stun_port = self.cfg.stun_port;
 
         let mut last_active = Instant::now();
-        let timeout_secs = (self.cfg.keep_alive_thresh - 1) as u64 * self.cfg.keepalive_interval.as_secs();
+        let timeout_secs =
+            (self.cfg.keep_alive_thresh - 1) as u64 * self.cfg.keepalive_interval.as_secs();
         loop {
             tokio::select! {
                 _ = keepalive_ticker.tick() => {
@@ -95,7 +96,7 @@ impl RelayClient {
                         }
                     }
                 }
-                
+
                 // Periodic IPv6 address update check
                 _ = ipv6_update_ticker.tick() => {
                     tracing::debug!("ipv6 update tick");
@@ -107,7 +108,7 @@ impl RelayClient {
                     }
                     // TODO：get stun port
                 }
-                
+
                 // inbound
                 result = conn.read_frame() => {
                     last_active = Instant::now();
@@ -162,17 +163,24 @@ impl RelayClient {
         Ok(())
     }
 
-    async fn connect(&self) -> crate::Result<Box<dyn Connection>> {
-        let conn = create_connection(ConnectionConfig::TCP(TCPConnectionConfig {
-            server_addr: self.cfg.server_addr.clone(),
-        }), self.block.clone()).await;
+    async fn connect(&self) -> crate::Result<Box<dyn ConnManage>> {
+        let conn = create_connection(
+            ConnectionConfig::TCP(TCPConnectionConfig {
+                server_addr: self.cfg.server_addr.clone(),
+            }),
+            self.block.clone(),
+        )
+        .await;
         match conn {
             Ok(conn) => Ok(conn),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
-    async fn handshake(&self, conn: &mut Box<dyn Connection>) -> crate::Result<HandshakeReplyFrame> {
+    async fn handshake(
+        &self,
+        conn: &mut Box<dyn ConnManage>,
+    ) -> crate::Result<HandshakeReplyFrame> {
         conn.write_frame(Frame::Handshake(HandshakeFrame {
             identity: self.cfg.identity.clone(),
         }))
@@ -187,8 +195,7 @@ impl RelayClient {
     }
 }
 
-#[derive(Clone)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RelayStatus {
     pub rx_error: u64,
     pub rx_frame: u64,
@@ -198,7 +205,7 @@ pub struct RelayStatus {
 
 impl Default for RelayStatus {
     fn default() -> Self {
-        Self{
+        Self {
             rx_error: 0,
             tx_error: 0,
             rx_frame: 0,
@@ -231,33 +238,34 @@ impl RelayHandler {
             handshake_reply: Arc::new(RwLock::new(None)),
         }
     }
-    
+
     /// Get self information
     pub async fn get_self_info(&self) -> Option<SelfInfo> {
         let reply_guard = self.handshake_reply.read().await;
         match (&self.config, reply_guard.as_ref()) {
-            (Some(cfg), Some(reply)) => {
-                Some(SelfInfo {
-                    identity: cfg.identity.clone(),
-                    private_ip: reply.private_ip.clone(),
-                    mask: reply.mask.clone(),
-                    gateway: reply.gateway.clone(),
-                    ciders: reply.ciders.clone(),
-                    ipv6: cfg.ipv6.clone(),
-                    port: cfg.port,
-                    stun_ip: cfg.stun_ip.clone(),
-                    stun_port: cfg.stun_port,
-                })
-            }
+            (Some(cfg), Some(reply)) => Some(SelfInfo {
+                identity: cfg.identity.clone(),
+                private_ip: reply.private_ip.clone(),
+                mask: reply.mask.clone(),
+                gateway: reply.gateway.clone(),
+                ciders: reply.ciders.clone(),
+                ipv6: cfg.ipv6.clone(),
+                port: cfg.port,
+                stun_ip: cfg.stun_ip.clone(),
+                stun_port: cfg.stun_port,
+            }),
             _ => None,
         }
     }
 
-    pub fn run_client(&mut self, cfg: RelayClientConfig,
-                      on_ready: mpsc::Sender<HandshakeReplyFrame>) {
+    pub fn run_client(
+        &mut self,
+        cfg: RelayClientConfig,
+        on_ready: mpsc::Sender<HandshakeReplyFrame>,
+    ) {
         // Store config
         self.config = Some(cfg.clone());
-        
+
         let (outbound_tx, outbound_rx) = mpsc::channel(cfg.outbound_buffer_size);
         let mut client = RelayClient::new(
             cfg.clone(),
@@ -266,7 +274,7 @@ impl RelayHandler {
             self.block.clone(),
         );
         self.outbound_tx = Some(outbound_tx);
-        
+
         // Store handshake reply when received
         let handshake_reply = self.handshake_reply.clone();
 
@@ -289,15 +297,15 @@ impl RelayHandler {
                         continue;
                     }
                 };
-                
+
                 tracing::info!("Handshake complete with {} peers", frame.peer_details.len());
-                
+
                 // Store handshake reply in handler
                 {
                     let mut guard = handshake_reply.write().await;
                     *guard = Some(frame.clone());
                 }
-                
+
                 if let Err(e) = on_ready.send(frame.clone()).await {
                     tracing::error!("on ready send fail: {}", e);
                 }
@@ -310,7 +318,7 @@ impl RelayHandler {
         });
     }
 
-    pub fn get_outbound_tx(&self)-> Option<mpsc::Sender<Frame>> {
+    pub fn get_outbound_tx(&self) -> Option<mpsc::Sender<Frame>> {
         self.outbound_tx.clone()
     }
 
@@ -322,7 +330,7 @@ impl RelayHandler {
             Err(e) => {
                 // self.metrics.tx_error += 1;
                 Err(format!("device=> server fail {:?}", e).into())
-            },
+            }
         }
     }
 
@@ -332,11 +340,11 @@ impl RelayHandler {
             Some(frame) => {
                 self.metrics.rx_frame += 1;
                 Ok(frame)
-            },
+            }
             None => {
                 self.metrics.rx_error += 1;
                 Err("server => device fail for closed channel".into())
-            },
+            }
         }
     }
 
@@ -345,10 +353,14 @@ impl RelayHandler {
     }
 }
 
-pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>,
-                               ipv6: String, port: u16,
-                               stun_ip: String, stun_port: u16)
-                                ->crate::Result<(RelayHandler, HandshakeReplyFrame)> {
+pub async fn new_relay_handler(
+    args: &Args,
+    block: Arc<Box<dyn Block>>,
+    ipv6: String,
+    port: u16,
+    stun_ip: String,
+    stun_port: u16,
+) -> crate::Result<(RelayHandler, HandshakeReplyFrame)> {
     let client_config = RelayClientConfig {
         server_addr: args.server.clone(),
         keepalive_interval: Duration::from_secs(args.keepalive_interval),
@@ -358,7 +370,7 @@ pub async fn new_relay_handler(args: &Args, block: Arc<Box<dyn Block>>,
         ipv6,
         port,
         stun_ip,
-        stun_port
+        stun_port,
     };
 
     let mut handler = RelayHandler::new(block);

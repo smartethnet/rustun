@@ -1,9 +1,9 @@
 use crate::codec::frame::Frame::HandshakeReply;
 use crate::codec::frame::{Frame, HandshakeFrame, HandshakeReplyFrame, KeepAliveFrame, PeerDetail};
 use crate::crypto::Block;
+use crate::network::ConnectionMeta;
 use crate::network::connection_manager::ConnectionManager;
-use crate::network::{Connection, ListenerConfig, create_listener, TCPListenerConfig};
-use crate::network::{ConnectionMeta};
+use crate::network::{ListenerConfig, ConnManage, TCPListenerConfig, create_listener};
 use crate::server::client_manager::ClientManager;
 use crate::server::config::ServerConfig;
 use std::sync::Arc;
@@ -78,7 +78,7 @@ impl Server {
         }
     }
 
-    fn handle_conn(&self, mut conn: Box<dyn Connection>) -> crate::Result<()> {
+    fn handle_conn(&self, mut conn: Box<dyn ConnManage>) -> crate::Result<()> {
         let peer_addr = conn.peer_addr().unwrap();
         tracing::debug!("new connection from {}", conn.peer_addr().unwrap());
 
@@ -98,7 +98,7 @@ impl Server {
 pub struct Handler {
     connection_manager: Arc<ConnectionManager>,
     client_manager: Arc<ClientManager>,
-    conn: Box<dyn Connection>,
+    conn: Box<dyn ConnManage>,
     outbound_tx: mpsc::Sender<Frame>,
     outbound_rx: mpsc::Receiver<Frame>,
     cluster: Option<String>,
@@ -108,7 +108,7 @@ impl Handler {
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
         client_manager: Arc<ClientManager>,
-        conn: Box<dyn Connection>,
+        conn: Box<dyn ConnManage>,
     ) -> Handler {
         let (tx, rx) = mpsc::channel(OUTBOUND_BUFFER_SIZE);
         Self {
@@ -228,20 +228,16 @@ impl Handler {
     ///
     fn build_others(&self, cluster: &str, my_id: &String) -> Vec<PeerDetail> {
         // reply handshake with other clients info
-        let others = self
-            .client_manager
-            .get_cluster_clients_exclude(my_id);
+        let others = self.client_manager.get_cluster_clients_exclude(my_id);
         others
             .iter()
             .map(|client| {
-                let (ipv6, port, stun_ip, stun_port, last_active) = match self.connection_manager
-                    .get_connection_by_identity(cluster, &client.identity) {
-                    Some(c) => {
-                        (c.ipv6, c.port, c.stun_ip, c.stun_port, c.last_active)
-                    },
-                    None => {
-                        ("".to_string(), 0, "".to_string(), 0, 0)
-                    }
+                let (ipv6, port, stun_ip, stun_port, last_active) = match self
+                    .connection_manager
+                    .get_connection_by_identity(cluster, &client.identity)
+                {
+                    Some(c) => (c.ipv6, c.port, c.stun_ip, c.stun_port, c.last_active),
+                    None => ("".to_string(), 0, "".to_string(), 0, 0),
                 };
 
                 PeerDetail {
@@ -262,8 +258,14 @@ impl Handler {
     async fn handle_frame(&mut self, frame: Frame) {
         match frame {
             Frame::KeepAlive(frame) => {
-                tracing::info!("on keepalive from {} {}:{} {}:{}",
-                    frame.identity, frame.ipv6, frame.port, frame.stun_ip, frame.stun_port);
+                tracing::info!(
+                    "on keepalive from {} {}:{} {}:{}",
+                    frame.identity,
+                    frame.ipv6,
+                    frame.port,
+                    frame.stun_ip,
+                    frame.stun_port
+                );
 
                 let client = self.client_manager.get_client(&frame.identity);
                 let mut name = String::new();

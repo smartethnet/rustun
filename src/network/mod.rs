@@ -4,9 +4,9 @@ pub mod tcp_listener;
 
 use crate::codec::frame::Frame;
 use crate::crypto::Block;
+use crate::network::ListenerConfig::TCP;
 use crate::network::tcp_connection::TcpConnection;
 use crate::network::tcp_listener::TCPListener;
-use crate::network::ListenerConfig::TCP;
 use async_trait::async_trait;
 use ipnet::IpNet;
 use std::fmt::Display;
@@ -21,46 +21,23 @@ use tokio::time::timeout;
 /// Default timeout for TCP connection establishment
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Network connection abstraction for reading/writing frames
-///
-/// This trait provides a protocol-agnostic interface for connection operations.
-/// Implementations handle the underlying transport (TCP, UDP, etc.) and frame
-/// marshaling/unmarshaling with encryption/decryption.
 #[async_trait]
-pub trait Connection: Send + Sync {
-    /// Read a frame from the connection
-    ///
-    /// Blocks until a complete frame is received and decoded.
-    ///
-    /// # Returns
-    /// - `Ok(Frame)` - Successfully received and decoded frame
-    /// - `Err` - Connection error or frame parsing failure
+pub trait ConnRead: Send + Sync {
     async fn read_frame(&mut self) -> crate::Result<Frame>;
+}
 
-    /// Write a frame to the connection
-    ///
-    /// Encodes and sends the frame over the connection.
-    ///
-    /// # Arguments
-    /// - `frame` - The frame to send
-    ///
-    /// # Returns
-    /// - `Ok(())` - Frame sent successfully
-    /// - `Err` - Connection error or encoding failure
+#[async_trait]
+pub trait ConnWrite: Send + Sync {
     async fn write_frame(&mut self, frame: Frame) -> crate::Result<()>;
-
-    // async fn send_frame_to(&mut self, frame: &Frame, to: SocketAddr) -> crate::Result<()>;
-
-    /// Close the connection gracefully
     async fn close(&mut self);
+}
 
-    /// Get the peer's socket address
-    ///
-    /// # Returns
-    /// - `Ok(SocketAddr)` - Peer's address
-    /// - `Err` - Connection not established or closed
+#[async_trait]
+pub trait HasPeerAddr {
     fn peer_addr(&mut self) -> io::Result<SocketAddr>;
 }
+
+pub trait ConnManage: ConnRead + ConnWrite + HasPeerAddr {}
 
 /// Network listener abstraction for accepting connections
 ///
@@ -86,7 +63,7 @@ pub trait Listener: Send + Sync {
     /// # Returns
     /// - `Ok(Receiver)` - Channel for receiving new connections
     /// - `Err` - Failed to create subscription channel
-    async fn subscribe_on_conn(&mut self) -> crate::Result<mpsc::Receiver<Box<dyn Connection>>>;
+    async fn subscribe_on_conn(&mut self) -> crate::Result<mpsc::Receiver<Box<dyn ConnManage>>>;
 
     /// Close the listener
     ///
@@ -135,7 +112,10 @@ impl PartialEq<ConnectionMeta> for &ConnectionMeta {
 
 impl ConnectionMeta {
     pub fn dump(&self) -> String {
-        format!("{},{},{},{}", self.cluster, self.identity, self.private_ip, self.last_active)
+        format!(
+            "{},{},{},{}",
+            self.cluster, self.identity, self.private_ip, self.last_active
+        )
     }
     /// Check if a destination IP matches this connection's routing rules
     ///
@@ -160,7 +140,8 @@ impl ConnectionMeta {
 
         for cidr in &self.ciders {
             if let Ok(network) = cidr.parse::<IpNet>()
-                && network.contains(&dst_ip) {
+                && network.contains(&dst_ip)
+            {
                 return true;
             }
         }
@@ -205,23 +186,25 @@ pub fn create_listener(
 }
 
 pub struct TCPConnectionConfig {
-    pub(crate) server_addr: String
+    pub(crate) server_addr: String,
 }
 
 pub enum ConnectionConfig {
     TCP(TCPConnectionConfig),
 }
 
-pub async fn create_connection(config: ConnectionConfig,
-                               block: Arc<Box<dyn Block>>,
-) -> crate::Result<Box<dyn Connection>> {
+pub async fn create_connection(
+    config: ConnectionConfig,
+    block: Arc<Box<dyn Block>>,
+) -> crate::Result<Box<dyn ConnManage>> {
     match config {
         ConnectionConfig::TCP(config) => {
             // Connect with timeout
             let connect_result = timeout(
                 DEFAULT_CONNECT_TIMEOUT,
-                TcpStream::connect(&config.server_addr)
-            ).await;
+                TcpStream::connect(&config.server_addr),
+            )
+            .await;
 
             match connect_result {
                 Ok(Ok(stream)) => {

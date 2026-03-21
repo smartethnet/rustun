@@ -1,6 +1,6 @@
 use crate::crypto::Block;
 use crate::network::tcp_connection::TcpConnection;
-use crate::network::{Connection, Listener};
+use crate::network::{ConnManage, Listener};
 use async_trait::async_trait;
 use std::io::ErrorKind;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ pub struct TCPListener {
     /// Underlying tokio TCP listener
     listener: Option<TcpListener>,
     /// Channel sender for broadcasting new connections
-    on_conn_tx: Option<mpsc::Sender<Box<dyn Connection>>>,
+    on_conn_tx: Option<mpsc::Sender<Box<dyn ConnManage>>>,
     /// Crypto Block
     block: Arc<Box<dyn Block>>,
 }
@@ -121,8 +121,8 @@ impl Listener for TCPListener {
     ///
     /// # Returns
     /// - `Ok(Receiver)` - Channel receiver for new connections
-    async fn subscribe_on_conn(&mut self) -> crate::Result<Receiver<Box<dyn Connection>>> {
-        let (tx, rx) = mpsc::channel::<Box<dyn Connection>>(DEFAULT_ON_CONNECTION_QUEUE);
+    async fn subscribe_on_conn(&mut self) -> crate::Result<Receiver<Box<dyn ConnManage>>> {
+        let (tx, rx) = mpsc::channel::<Box<dyn ConnManage>>(DEFAULT_ON_CONNECTION_QUEUE);
         self.on_conn_tx = Some(tx);
         Ok(rx)
     }
