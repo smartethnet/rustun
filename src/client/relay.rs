@@ -8,8 +8,9 @@ use crate::utils::{self, StunAddr};
 use std::net::{Ipv6Addr, SocketAddr};
 use std::ops::ControlFlow;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Instant;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::mpsc;
 use tokio::time::{Duration, interval};
 
 const CHANNEL_BUFFER_SIZE: usize = 1000;
@@ -276,7 +277,7 @@ impl RelayHandler {
 
     /// Get self information
     pub async fn get_self_info(&self) -> Option<SelfInfo> {
-        let reply_guard = self.handshake_reply.read().await;
+        let reply_guard = self.handshake_reply.read().unwrap();
         match (&self.config, reply_guard.as_ref()) {
             (Some(cfg), Some(reply)) => Some(SelfInfo {
                 identity: cfg.identity.clone(),
@@ -385,7 +386,7 @@ async fn run_client_session(
 
     // Store handshake reply in handler
     {
-        let mut guard = handshake_reply.write().await;
+        let mut guard = handshake_reply.write().unwrap();
         *guard = Some(frame.clone());
     }
 

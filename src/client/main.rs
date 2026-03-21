@@ -1,5 +1,5 @@
 use crate::client::http::server;
-use crate::client::p2p::peer::PeerHandler;
+use crate::client::p2p::peer::{NewPeersTx, PeerHandler, PeerHandlerApi, SendFrame, SendFrameTx};
 use crate::client::p2p::stun::StunClient;
 use crate::client::prettylog::{get_status, log_startup_banner};
 use crate::client::relay::{RelayHandler, new_relay_handler};
@@ -11,7 +11,7 @@ use crate::utils::{self, StunAddr};
 use clap::Parser;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::mpsc;
 use tokio::time::interval;
 
 pub async fn run_client() -> anyhow::Result<()> {
@@ -56,13 +56,12 @@ pub async fn run_client() -> anyhow::Result<()> {
     let p2p_handler = if args.enable_p2p {
         tracing::info!("P2P mode enabled");
 
-        let mut handler = PeerHandler::new(crypto_block.clone(), args.identity.clone());
-        handler.run_peer_service();
-        handler
-            .rewrite_peers(device_config.peer_details.clone())
-            .await;
-        handler.start_probe_timer().await;
-        Some(Arc::new(RwLock::new(handler)))
+        let handler = PeerHandler::start_peer_service(
+            crypto_block.clone(),
+            args.identity.clone(),
+            device_config.peer_details.clone(),
+        );
+        Some(handler)
     } else {
         tracing::info!("P2P mode disabled, using relay only");
         None
@@ -134,9 +133,23 @@ async fn init_device(
 
 async fn run_event_loop(
     client_handler: &mut RelayHandler,
-    p2p_handler: Option<Arc<RwLock<PeerHandler>>>,
+    p2p_handler: Option<PeerHandlerApi>,
     dev: &mut DeviceHandler,
 ) {
+    let (
+        p2p_handler_new_peers,
+        mut p2p_handler_recv_frame,
+        p2p_handler_get_status,
+        p2p_handler_send_frame,
+    ) = match p2p_handler {
+        Some(p) => (
+            Some(p.new_peers),
+            Some(p.new_frame),
+            Some(p.get_status),
+            Some(p.send_frame),
+        ),
+        None => (None, None, None, None),
+    };
     let mut refresh_ticker = interval(Duration::from_secs(30));
     let relay_outbound = match client_handler.get_outbound_tx() {
         Some(tx) => tx,
@@ -148,13 +161,16 @@ async fn run_event_loop(
         None => return,
     };
 
-    let p2p_for_spawn = p2p_handler.clone();
-
     tokio::spawn(async move {
         loop {
             let packet = dev_inbound.recv().await;
             if let Some(packet) = packet {
-                handle_device_packet(relay_outbound.clone(), p2p_for_spawn.clone(), packet).await;
+                handle_device_packet(
+                    relay_outbound.clone(),
+                    p2p_handler_send_frame.as_ref(),
+                    packet,
+                )
+                .await;
             }
         }
     });
@@ -164,38 +180,39 @@ async fn run_event_loop(
             // Server -> TUN device or route update
             frame = client_handler.recv_frame() => {
                 if let Ok(frame) = frame {
-                    handle_relay_frame(frame, &p2p_handler, dev).await;
+                    handle_relay_frame(frame, p2p_handler_new_peers.as_ref(), dev).await;
                 }
             }
 
             // P2P -> TUN device (only if P2P enabled)
-            frame = async {
-                match p2p_handler.as_ref() {
-                    Some(arc) => {
-                        let arc = arc.clone();
-                        let mut guard = arc.write().await;
-                        guard.recv_frame().await
-                    }
+            Some(frame) = async {
+                match p2p_handler_recv_frame.as_mut() {
+                    Some(rx) => rx.0.recv().await,
                     None => std::future::pending().await, // Never resolves if no P2P
                 }
             } => {
-                if let Ok(Frame::Data(data_frame)) = frame {
-                    tracing::debug!("P2P -> Device: {} bytes", data_frame.payload.len());
-                    if let Err(e) = dev.send(data_frame.payload).await {
-                        tracing::error!("Failed to write to device: {}", e);
-                    }
+                let Frame::Data(data_frame) = frame else {
+                    continue;
+                };
+                tracing::debug!("P2P -> Device: {} bytes", data_frame.payload.len());
+                if let Err(e) = dev.send(data_frame.payload).await {
+                    tracing::error!("Failed to write to device: {}", e);
                 }
             }
 
             // refresh config and status
             _ = refresh_ticker.tick() => {
-                match &p2p_handler {
-                    Some(arc) => {
-                        let guard = arc.read().await;
-                        get_status(client_handler, Some(&*guard), dev).await;
-                    }
-                    None => get_status(client_handler, None, dev).await,
-                }
+                let peer_status = match p2p_handler_get_status.as_ref() {
+                    None => None,
+                    Some(p) => match p.get().await {
+                        Ok(s) => Some(s),
+                        Err(e) => {
+                            tracing::error!("failed to get peer status: {e}");
+                            None
+                        }
+                    },
+                };
+                get_status(client_handler, peer_status.as_deref(), dev).await;
             }
         }
     }
@@ -204,7 +221,7 @@ async fn run_event_loop(
 /// Handle outbound packet from TUN device: try P2P first if available, then fallback to relay.
 async fn handle_device_packet(
     relay_outbound: mpsc::Sender<Frame>,
-    p2p_handler: Option<Arc<RwLock<PeerHandler>>>,
+    p2p_handler: Option<&SendFrameTx>,
     packet: Vec<u8>,
 ) {
     let data_frame = DataFrame {
@@ -212,13 +229,14 @@ async fn handle_device_packet(
     };
 
     // Try P2P first if available
-    if let Some(arc) = &p2p_handler {
+    if let Some(tx) = &p2p_handler {
         let dst = data_frame.dst();
-        let guard = arc.read().await;
-        match guard
-            .send_frame(Frame::Data(data_frame.clone()), dst.as_str())
-            .await
-        {
+        let frame = SendFrame {
+            frame: Frame::Data(data_frame.clone()),
+            dst,
+        };
+
+        match tx.0.send(frame).await {
             Ok(_) => {
                 tracing::debug!("Device -> P2P: {} bytes", packet.len());
                 return;
@@ -239,7 +257,7 @@ async fn handle_device_packet(
 /// Handle frame received from relay server
 async fn handle_relay_frame(
     frame: Frame,
-    p2p_handler: &Option<Arc<RwLock<PeerHandler>>>,
+    p2p_handler: Option<&NewPeersTx>,
     dev: &mut DeviceHandler,
 ) {
     match frame {
@@ -259,9 +277,8 @@ async fn handle_relay_frame(
             dev.reload_route(keepalive.peer_details.clone()).await;
 
             // Update P2P peer information if P2P is enabled
-            if let Some(arc) = p2p_handler {
-                let mut guard = arc.write().await;
-                guard.insert_or_update(keepalive.peer_details).await;
+            if let Some(tx) = p2p_handler {
+                let _ = tx.0.send(keepalive.peer_details).await;
             }
         }
         _ => {}

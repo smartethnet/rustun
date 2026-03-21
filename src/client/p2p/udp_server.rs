@@ -3,7 +3,7 @@ use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
 
 /// UDP packet buffer size
-/// 
+///
 /// 2048 bytes is sufficient for:
 /// - Typical VPN frames (MTU 1500 + headers)
 /// - Control frames (handshake, keepalive, etc.)
@@ -56,7 +56,7 @@ pub struct UDPServer {
     ///
     /// PeerHandler sends encrypted packets through this channel.
     /// The server selects the appropriate socket based on destination address type.
-    output_rx: mpsc::Receiver<(Vec<u8>, SocketAddr)>,
+    output_rx: mpsc::Receiver<(Vec<u8>, Vec<SocketAddr>)>,
 }
 
 impl UDPServer {
@@ -79,7 +79,7 @@ impl UDPServer {
         listen_port: u16,
         stun_port: u16,
         input_tx: mpsc::Sender<(Vec<u8>, SocketAddr)>,
-        output_rx: mpsc::Receiver<(Vec<u8>, SocketAddr)>,
+        output_rx: mpsc::Receiver<(Vec<u8>, Vec<SocketAddr>)>,
     ) -> Self {
         UDPServer {
             listen_port,
@@ -121,7 +121,10 @@ impl UDPServer {
         // Bind IPv4 socket for STUN hole punching
         // This socket uses the port discovered by STUN client
         let socket_ipv4 = UdpSocket::bind(format!("0.0.0.0:{}", self.stun_port)).await?;
-        tracing::info!("P2P IPv4 UDP (STUN) listening on {}", socket_ipv4.local_addr()?);
+        tracing::info!(
+            "P2P IPv4 UDP (STUN) listening on {}",
+            socket_ipv4.local_addr()?
+        );
 
         // Separate buffers for each socket to avoid data races
         let mut buf_ipv6 = vec![0u8; BUFFER_SIZE];
@@ -176,17 +179,19 @@ impl UDPServer {
         socket_ipv6: &UdpSocket,
         socket_ipv4: &UdpSocket,
         data: &[u8],
-        remote: SocketAddr,
+        remotes: Vec<SocketAddr>,
     ) {
-        // Select socket based on destination address family
-        let (socket, protocol) = if remote.is_ipv4() {
-            (socket_ipv4, "IPv4")
-        } else {
-            (socket_ipv6, "IPv6")
-        };
+        for remote in &remotes {
+            // Select socket based on destination address family
+            let (socket, protocol) = if remote.is_ipv4() {
+                (socket_ipv4, "IPv4")
+            } else {
+                (socket_ipv6, "IPv6")
+            };
 
-        if let Err(e) = socket.send_to(data, remote).await {
-            tracing::error!("Failed to send {} packet to {}: {:?}", protocol, remote, e);
+            if let Err(e) = socket.send_to(data, remote).await {
+                tracing::error!("Failed to send {} packet to {}: {:?}", protocol, remote, e);
+            }
         }
     }
 
@@ -229,7 +234,12 @@ impl UDPServer {
 
                 // Forward to PeerHandler for decryption and protocol processing
                 if let Err(e) = self.input_tx.send((packet, remote)).await {
-                    tracing::error!("Failed to forward {} packet from {}: {:?}", protocol, remote, e);
+                    tracing::error!(
+                        "Failed to forward {} packet from {}: {:?}",
+                        protocol,
+                        remote,
+                        e
+                    );
                 }
 
                 // Reset buffer for next packet (optional but good practice)

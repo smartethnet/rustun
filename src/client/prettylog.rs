@@ -8,7 +8,7 @@ use crate::client::http::{
     ClusterPeerInfo, IPv6ConnectionInfo, P2PPeerInfo, P2PStatus, RelayStatusInfo,
     STUNConnectionInfo, StatusResponse, TrafficStats,
 };
-use crate::client::p2p::peer::PeerHandler;
+use crate::client::p2p::PeerStatus;
 use crate::client::relay::RelayHandler;
 use crate::codec::frame::HandshakeReplyFrame;
 use crate::utils::device::DeviceHandler;
@@ -41,7 +41,7 @@ pub fn log_handshake_success(config: &HandshakeReplyFrame) {
     println!("Ready to forward traffic");
 }
 
-pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &DeviceHandler) {
+pub async fn get_status(relay: &RelayHandler, peer: Option<&[PeerStatus]>, dev: &DeviceHandler) {
     println!("\n╔══════════════════════════════════════════════════════════════════════╗");
     println!("║                        CONNECTION STATUS                             ║");
     println!("╚══════════════════════════════════════════════════════════════════════╝");
@@ -64,9 +64,7 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &
     );
 
     // P2P Status
-    if let Some(peer_handler) = peer {
-        let peer_status = peer_handler.get_status().await;
-
+    if let Some(peer_status) = peer {
         if peer_status.is_empty() {
             println!("\n🔗 P2P Connections (UDP)");
             println!("   └─ No peers configured");
@@ -188,16 +186,22 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&PeerHandler>, dev: &
     println!();
 
     // Update HTTP cache
-    let status = build_status_response(relay, peer, dev).await;
-    cache::update(status).await;
+    let status = match build_status_response(relay, peer, dev).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("failed: {e}");
+            return;
+        }
+    };
+    cache::update(status);
 }
 
 /// Build status response for HTTP API
 pub async fn build_status_response(
     relay: &RelayHandler,
-    peer: Option<&PeerHandler>,
+    peer: Option<&[PeerStatus]>,
     dev: &DeviceHandler,
-) -> StatusResponse {
+) -> anyhow::Result<StatusResponse> {
     // Self information from relay
     let self_info = relay.get_self_info().await;
 
@@ -219,8 +223,7 @@ pub async fn build_status_response(
     };
 
     // P2P status
-    let p2p = if let Some(peer_handler) = peer {
-        let peer_statuses = peer_handler.get_status().await;
+    let p2p = if let Some(peer_statuses) = peer {
         let mut peers = Vec::new();
 
         for status in peer_statuses {
@@ -315,11 +318,11 @@ pub async fn build_status_response(
         })
         .collect();
 
-    StatusResponse {
+    Ok(StatusResponse {
         self_info,
         traffic,
         relay,
         p2p,
         cluster_peers,
-    }
+    })
 }
