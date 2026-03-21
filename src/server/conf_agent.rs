@@ -1,11 +1,12 @@
-use std::collections::HashMap;
+use crate::network::connection_manager::ConnectionManager;
 use crate::server::client_manager::{ClientConfig, ClientManager};
 use crate::server::config::ConfAgentConfig;
-use crate::network::connection_manager::ConnectionManager;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::fs;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 
 /// Connection update request for backend API
 #[derive(Serialize, Debug)]
@@ -35,7 +36,6 @@ pub struct ConfAgent {
     connection_manager: Arc<ConnectionManager>,
     routes_file: String,
 }
-
 
 impl ConfAgent {
     pub fn new(
@@ -152,26 +152,9 @@ impl ConfAgent {
     }
 
     /// Fetch routes from control plane API
-    async fn fetch_routes(
-        url: &str,
-        token: Option<&str>,
-    ) -> anyhow::Result<Vec<ClientConfig>> {
-        let mut request = ureq::get(url).timeout(Duration::from_secs(30));
-
-        if let Some(token) = token {
-            request = request.set("Authorization", &format!("Bearer {}", token));
-        }
-
-        let response = request.call()?;
-
-        let status = response.status();
-        let body = response.into_string()?;
-        
-        if status != 200 {
-            return Err(anyhow::anyhow!("Control plane returned error: {} - {}", status, body));
-        }
-
-        let routes: Vec<ClientConfigResponse> = serde_json::from_str(&body)?;
+    async fn fetch_routes(url: &str, token: Option<&str>) -> anyhow::Result<Vec<ClientConfig>> {
+        let body = http_json(url, token, Input::Get).await?.unwrap();
+        let routes: Vec<ClientConfigResponse> = serde_json::from_value(body)?;
 
         // Convert to ClientConfig format
         let client_configs: Vec<ClientConfig> = routes
@@ -209,32 +192,62 @@ impl ConfAgent {
         Ok(())
     }
 
-
     /// Send connection updates to control plane API
     async fn send_connection_updates(
         url: &str,
         token: Option<&str>,
         updates: &[ConnectionUpdateRequest],
     ) -> anyhow::Result<()> {
-        let json_data = serde_json::to_string(updates)?;
-
-        let mut request = ureq::post(url)
-            .set("Content-Type", "application/json")
-            .timeout(Duration::from_secs(30));
-
-        if let Some(token) = token {
-            request = request.set("Authorization", &format!("Bearer {}", token));
-        }
-
-        let response = request.send_string(&json_data)?;
-        let status = response.status();
-        let body = response.into_string()?;
-
-        if status != 200 {
-            return Err(anyhow::anyhow!("Backend returned error: {} - {}", status, body));
-        }
-
+        let updates = serde_json::to_value(updates)?;
+        http_json(url, token, Input::Post(updates)).await?;
         Ok(())
     }
 }
 
+#[derive(Debug, Clone)]
+enum Input {
+    Get,
+    Post(serde_json::Value),
+}
+async fn http_json(
+    url: &str,
+    token: Option<&str>,
+    input: Input,
+) -> anyhow::Result<Option<serde_json::Value>> {
+    use tokio::time::timeout_at;
+    let method = match &input {
+        Input::Get => reqwest::Method::GET,
+        Input::Post(_) => reqwest::Method::POST,
+    };
+    let mut request = reqwest::Request::new(method, url.parse()?);
+    if let Input::Post(input) = &input {
+        request
+            .headers_mut()
+            .insert("Content-Type", "application/json".try_into().unwrap());
+        let body = reqwest::Body::wrap(input.to_string());
+        *request.body_mut() = Some(body);
+    }
+    if let Some(token) = token {
+        request
+            .headers_mut()
+            .insert("Authorization", format!("Bearer {}", token).try_into()?);
+    }
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let client = reqwest::Client::new();
+    let response = timeout_at(deadline.into(), client.execute(request)).await??;
+    let status = response.status();
+    let body = timeout_at(deadline.into(), response.text()).await;
+    if status != 200 {
+        return Err(anyhow::anyhow!(
+            "Control plane returned error: {} - {:?}",
+            status,
+            body
+        ));
+    }
+    let body = body??;
+    let body = match &input {
+        Input::Get => None,
+        Input::Post(_) => serde_json::from_str(&body)?,
+    };
+    Ok(body)
+}

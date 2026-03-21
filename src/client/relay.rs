@@ -85,7 +85,7 @@ impl RelayClient {
                 // Periodic IPv6 address update check
                 _ = ipv6_update_ticker.tick() => {
                     tracing::debug!("ipv6 update tick");
-                    if let Some(new_ipv6) = utils::get_ipv6() {
+                    if let Some(new_ipv6) = utils::get_ipv6().await {
                         tracing::info!("IPv6 address updated: {} -> {}", current_ipv6, new_ipv6);
                         current_ipv6 = new_ipv6.clone();
                     } else {

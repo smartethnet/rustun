@@ -1,4 +1,7 @@
-use std::net::Ipv6Addr;
+use std::{
+    net::Ipv6Addr,
+    time::{Duration, Instant},
+};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -41,7 +44,7 @@ pub fn init_tracing() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Get public IPv6 address from external API
-pub fn get_ipv6() -> Option<String> {
+pub async fn get_ipv6() -> Option<String> {
     let apis = [
         "https://api64.ipify.org",
         "https://ifconfig.co",
@@ -49,7 +52,7 @@ pub fn get_ipv6() -> Option<String> {
     ];
 
     for api in &apis {
-        if let Ok(ipv6) = fetch_ipv6_from_url(api) {
+        if let Ok(ipv6) = fetch_ipv6_from_url(api).await {
             return Some(ipv6);
         }
     }
@@ -57,11 +60,11 @@ pub fn get_ipv6() -> Option<String> {
     None
 }
 
-fn fetch_ipv6_from_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let response = ureq::get(url)
-        .timeout(std::time::Duration::from_secs(5))
-        .call()?
-        .into_string()?;
+async fn fetch_ipv6_from_url(url: &str) -> anyhow::Result<String> {
+    use tokio::time::timeout_at;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let get = timeout_at(deadline.into(), reqwest::get(url)).await??;
+    let response = timeout_at(deadline.into(), get.text()).await??;
 
     let ipv6_str = response.trim();
 
