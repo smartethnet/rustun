@@ -626,7 +626,7 @@ fn update_address(peer: &mut PeerMeta, new_addr: SocketAddr, protocol: Protocol)
         let new_addr = LastActive::dormant(Some(new_addr));
         match protocol {
             Protocol::Stun => peer.stun_addr = new_addr,
-            Protocol::Ipv6 => peer.stun_addr = new_addr,
+            Protocol::Ipv6 => peer.remote_addr = new_addr,
         }
     }
 }
