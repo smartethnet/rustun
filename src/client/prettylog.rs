@@ -76,18 +76,18 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&[PeerStatus]>, dev: 
                 let prefix = if is_last { "└─" } else { "├─" };
                 let continuation = if is_last { " " } else { "│" };
 
-                println!("   {} Peer: {}", prefix, status.name);
+                println!("   {prefix} Peer: {}", status.name);
 
                 // IPv6 Direct Connection
                 let ipv6_state = match (&status.ipv6_addr, &status.ipv6_last_active) {
                     (None, _) => "❌ No Address".to_string(),
-                    (Some(addr), None) => format!("⏳ Connecting... ({})", addr),
+                    (Some(addr), None) => format!("⏳ Connecting... ({addr})"),
                     (Some(addr), Some(last)) => {
                         let elapsed = last.elapsed().as_secs();
                         if elapsed < 15 {
-                            format!("✅ Active ({}s ago, {})", elapsed, addr)
+                            format!("✅ Active ({elapsed}s ago, {addr})")
                         } else {
-                            format!("⚠️  Inactive ({}s ago, {})", elapsed, addr)
+                            format!("⚠️  Inactive ({elapsed}s ago, {addr})")
                         }
                     }
                 };
@@ -96,17 +96,17 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&[PeerStatus]>, dev: 
                 // STUN Hole-Punched Connection
                 let stun_state = match (&status.stun_addr, &status.stun_last_active) {
                     (None, _) => "❌ No Address".to_string(),
-                    (Some(addr), None) => format!("⏳ Connecting... ({})", addr),
+                    (Some(addr), None) => format!("⏳ Connecting... ({addr})"),
                     (Some(addr), Some(last)) => {
                         let elapsed = last.elapsed().as_secs();
                         if elapsed < 15 {
-                            format!("✅ Active ({}s ago, {})", elapsed, addr)
+                            format!("✅ Active ({elapsed}s ago, {addr})")
                         } else {
-                            format!("⚠️  Inactive ({}s ago, {})", elapsed, addr)
+                            format!("⚠️  Inactive ({elapsed}s ago, {addr})")
                         }
                     }
                 };
-                println!("   {}    └─ STUN:  {}", continuation, stun_state);
+                println!("   {continuation}    └─ STUN:  {stun_state}");
             }
         }
     } else {
@@ -147,38 +147,31 @@ pub async fn get_status(relay: &RelayHandler, peer: Option<&[PeerStatus]>, dev: 
                 "Offline".to_string()
             } else {
                 let elapsed = now.saturating_sub(peer.last_active);
-                format!("{}s ago", elapsed)
+                format!("{elapsed}s ago")
             };
 
-            println!(
-                "   {} {} {} ({})",
-                prefix, status_icon, peer.name, online_info
-            );
-            println!("   {}    ├─ Private IP: {}", continuation, peer.private_ip);
+            println!("   {prefix} {status_icon} {} ({online_info})", peer.name);
+            println!("   {continuation}    ├─ Private IP: {}", peer.private_ip);
 
             if !peer.ciders.is_empty() {
-                println!(
-                    "   {}    ├─ Routes: {}",
-                    continuation,
-                    peer.ciders.join(", ")
-                );
+                println!("   {continuation}    ├─ Routes: {}", peer.ciders.join(", "));
             }
 
             if !peer.ipv6.is_empty() {
                 println!(
-                    "   {}    ├─ IPv6: {}:{}",
-                    continuation, peer.ipv6, peer.port
+                    "   {continuation}    ├─ IPv6: [{}]:{}",
+                    peer.ipv6, peer.port
                 );
             }
 
             if !peer.stun_ip.is_empty() {
                 println!(
-                    "   {}    └─ STUN: {}:{}",
-                    continuation, peer.stun_ip, peer.stun_port
+                    "   {continuation}    └─ STUN: {}:{}",
+                    peer.stun_ip, peer.stun_port
                 );
             } else {
                 // Adjust last item if no stun_ip
-                println!("   {}    └─ STUN: Not configured", continuation);
+                println!("   {continuation}    └─ STUN: Not configured");
             }
         }
     }

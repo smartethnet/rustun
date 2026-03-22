@@ -211,17 +211,13 @@ impl RelayClient {
     }
 
     async fn connect(&self) -> anyhow::Result<Box<dyn ConnManage>> {
-        let conn = create_connection(
+        create_connection(
             ConnectionConfig::TCP(TCPConnectionConfig {
                 server_addr: self.cfg.server_addr.clone(),
             }),
             self.block.clone(),
         )
-        .await;
-        match conn {
-            Ok(conn) => Ok(conn),
-            Err(e) => Err(e),
-        }
+        .await
     }
 
     async fn handshake(

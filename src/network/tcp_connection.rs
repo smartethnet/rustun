@@ -143,7 +143,7 @@ impl ConnRead for TcpConnection {
                     };
                 }
                 Ok(Ok(n)) => {
-                    tracing::debug!("read {} bytes", n)
+                    tracing::debug!("read {n} bytes")
                 }
                 Ok(Err(e)) => return Err(e.into()),
                 Err(_) => return Err(anyhow::anyhow!("read timeout")),

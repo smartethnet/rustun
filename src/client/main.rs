@@ -107,13 +107,13 @@ async fn init_device(
     device_config: &HandshakeReplyFrame,
     enable_masq: bool,
 ) -> anyhow::Result<DeviceHandler> {
-    tracing::info!("Initializing device with config: {:?}", device_config);
+    tracing::info!("Initializing device with config: {device_config:?}");
     let mut dev = DeviceHandler::new();
     let tun_index = dev.run(device_config, enable_masq).await?;
 
     // Log TUN index (Windows only)
     if let Some(idx) = tun_index {
-        tracing::info!("TUN interface index: {}", idx);
+        tracing::info!("TUN interface index: {idx}");
     }
 
     dev.reload_route(device_config.peer_details.clone()).await;
@@ -241,7 +241,7 @@ async fn handle_device_packet(
                 return;
             }
             Err(e) => {
-                tracing::debug!("P2P send failed: {}, fallback to relay", e);
+                tracing::debug!("P2P send failed: {e}, fallback to relay");
             }
         }
     }

@@ -376,18 +376,16 @@ impl PeerHandler {
         match frame {
             Frame::ProbeIPv6(probe) => {
                 tracing::info!(
-                    "Received probe ipv6 from peer {} at {}",
-                    probe.identity,
-                    remote
+                    "Received probe ipv6 from peer {} at {remote}",
+                    probe.identity
                 );
                 self.peers
                     .update_peer_active(&probe.identity, remote, Protocol::Ipv6);
             }
             Frame::ProbeHolePunch(probe) => {
                 tracing::info!(
-                    "Received probe hole punch from peer {} at {}",
-                    probe.identity,
-                    remote
+                    "Received probe hole punch from peer {} at {remote}",
+                    probe.identity
                 );
                 self.peers
                     .update_peer_active(&probe.identity, remote, Protocol::Stun);
@@ -439,13 +437,11 @@ impl PeerHandler {
             SendResult::Success => return Ok(()),
             SendResult::Expired(elapsed) => {
                 tracing::debug!(
-                    "IPv6 connection to {} expired ({:?} ago), trying STUN",
-                    peer_identity,
-                    elapsed
+                    "IPv6 connection to {peer_identity} expired ({elapsed:?} ago), trying STUN"
                 );
             }
             SendResult::NeverResponded => {
-                tracing::debug!("Peer {} IPv6 never responded, trying STUN", peer_identity);
+                tracing::debug!("Peer {peer_identity} IPv6 never responded, trying STUN");
             }
             SendResult::NoAddress => {
                 // No IPv6 address, try STUN
@@ -466,17 +462,13 @@ impl PeerHandler {
         {
             SendResult::Success => Ok(()),
             SendResult::Expired(elapsed) => Err(anyhow::anyhow!(
-                "Peer {} STUN connection also expired ({:?} ago)",
-                peer_identity,
-                elapsed
+                "Peer {peer_identity} STUN connection also expired ({elapsed:?} ago)"
             )),
             SendResult::NeverResponded => Err(anyhow::anyhow!(
-                "Peer {} STUN address never responded",
-                peer_identity
+                "Peer {peer_identity} STUN address never responded"
             )),
             SendResult::NoAddress => Err(anyhow::anyhow!(
-                "Failed to send to peer {}: IPv6 unavailable/expired, STUN unavailable/expired",
-                peer_identity
+                "Failed to send to peer {peer_identity}: IPv6 unavailable/expired, STUN unavailable/expired"
             )),
         }
     }
@@ -510,16 +502,11 @@ impl PeerHandler {
         // Connection is valid, send the packet
         match outbound_tx.send((data.to_vec(), vec![addr])).await {
             Ok(_) => {
-                tracing::debug!(
-                    "Sent frame to peer {} via {}: {}",
-                    peer_identity,
-                    protocol,
-                    addr
-                );
+                tracing::debug!("Sent frame to peer {peer_identity} via {protocol}: {addr}");
                 SendResult::Success
             }
             Err(e) => {
-                tracing::error!("Failed to send via {}: {}", protocol, e);
+                tracing::error!("Failed to send via {protocol}: {e}");
                 SendResult::NeverResponded // Treat send error as connection problem
             }
         }
@@ -571,7 +558,7 @@ async fn send_probes(
     let probe_data = match Parser::marshal(probe_frame, block.as_ref().as_ref()) {
         Ok(data) => data,
         Err(e) => {
-            tracing::error!("Failed to marshal {} probe: {}", protocol, e);
+            tracing::error!("Failed to marshal {protocol} probe: {e}");
             return;
         }
     };
@@ -579,14 +566,9 @@ async fn send_probes(
     // Send to all peers
     let peer_addrs_display = format!("{peer_addrs:?}");
     if let Err(e) = outbound_tx.send((probe_data.clone(), peer_addrs)).await {
-        tracing::warn!(
-            "Failed to send {} probe to {}: {:?}",
-            protocol,
-            peer_addrs_display,
-            e
-        );
+        tracing::warn!("Failed to send {protocol} probe to {peer_addrs_display}: {e:?}");
     } else {
-        tracing::info!("Sent {} probe to {:?}", protocol, peer_addrs_display);
+        tracing::info!("Sent {protocol} probe to {peer_addrs_display:?}");
     }
 }
 
@@ -597,7 +579,7 @@ fn parse_address(identity: &str, ip: &str, port: u16) -> Option<SocketAddr> {
     let ip = match ip.parse::<IpAddr>() {
         Ok(ip) => ip,
         Err(e) => {
-            tracing::warn!("Invalid address for peer {}: {}", identity, e);
+            tracing::warn!("Invalid address for peer {identity}: {e}");
             return None;
         }
     };
@@ -614,13 +596,11 @@ fn update_address(peer: &mut PeerMeta, new_addr: SocketAddr, protocol: Protocol)
 
     if old_addr != Some(new_addr) {
         tracing::info!(
-            "Update {} address for peer {}: {} -> {}",
-            protocol,
+            "Update {protocol} address for peer {}: {} -> {new_addr}",
             peer.identity,
             old_addr
                 .map(|a| a.to_string())
                 .unwrap_or_else(|| "None".to_string()),
-            new_addr
         );
 
         let new_addr = LastActive::dormant(Some(new_addr));

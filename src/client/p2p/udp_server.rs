@@ -190,7 +190,7 @@ impl UDPServer {
             };
 
             if let Err(e) = socket.send_to(data, remote).await {
-                tracing::error!("Failed to send {} packet to {}: {:?}", protocol, remote, e);
+                tracing::error!("Failed to send {protocol} packet to {remote}: {e:?}");
             }
         }
     }
@@ -234,12 +234,7 @@ impl UDPServer {
 
                 // Forward to PeerHandler for decryption and protocol processing
                 if let Err(e) = self.input_tx.send((packet, remote)).await {
-                    tracing::error!(
-                        "Failed to forward {} packet from {}: {:?}",
-                        protocol,
-                        remote,
-                        e
-                    );
+                    tracing::error!("Failed to forward {protocol} packet from {remote}: {e:?}");
                 }
 
                 // Reset buffer for next packet (optional but good practice)
@@ -248,7 +243,7 @@ impl UDPServer {
             }
             Err(e) => {
                 // Socket errors are fatal - we can't recover from a broken socket
-                tracing::error!("UDP {} recv_from error: {}", protocol, e);
+                tracing::error!("UDP {protocol} recv_from error: {e}");
                 Err(e.into())
             }
         }

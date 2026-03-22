@@ -8,8 +8,8 @@ use crate::codec::errors::FrameError;
 use crate::codec::frame::*;
 use crate::crypto::Block;
 use anyhow::Context;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// Protocol magic number for frame validation
 const MAGIC: u32 = 0x91929394;
