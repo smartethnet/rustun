@@ -224,30 +224,28 @@ async fn http_json(
         request
             .headers_mut()
             .insert("Content-Type", "application/json".try_into().unwrap());
-        let body = reqwest::Body::wrap(input.to_string());
-        *request.body_mut() = Some(body);
+        let body = serde_json::to_vec(input)?;
+        *request.body_mut() = Some(body.into());
     }
     if let Some(token) = token {
         request
             .headers_mut()
-            .insert("Authorization", format!("Bearer {}", token).try_into()?);
+            .insert("Authorization", format!("Bearer {token}").try_into()?);
     }
     let deadline = Instant::now() + Duration::from_secs(30);
     let client = reqwest::Client::new();
     let response = timeout_at(deadline.into(), client.execute(request)).await??;
     let status = response.status();
-    let body = timeout_at(deadline.into(), response.text()).await;
+    let body = timeout_at(deadline.into(), response.bytes()).await;
     if status != 200 {
         return Err(anyhow::anyhow!(
-            "Control plane returned error: {} - {:?}",
-            status,
-            body
+            "Control plane returned error: {status} - {body:?}"
         ));
     }
     let body = body??;
     let body = match &input {
-        Input::Get => None,
-        Input::Post(_) => serde_json::from_str(&body)?,
+        Input::Get => serde_json::from_slice(&body)?,
+        Input::Post(_) => None,
     };
     Ok(body)
 }
