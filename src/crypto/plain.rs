@@ -38,7 +38,7 @@ impl Block for PlainBlock {
     ///
     /// # Returns
     /// * Always returns `Ok(())`
-    fn encrypt(&self, _data: &mut Vec<u8>) -> crate::Result<()> {
+    fn encrypt(&self, _data: &mut Vec<u8>) -> anyhow::Result<()> {
         // No encryption performed
         Ok(())
     }
@@ -50,7 +50,7 @@ impl Block for PlainBlock {
     ///
     /// # Returns
     /// * Always returns `Ok(())`
-    fn decrypt(&self, _data: &mut Vec<u8>) -> crate::Result<()> {
+    fn decrypt(&self, _data: &mut Vec<u8>) -> anyhow::Result<()> {
         // No decryption performed
         Ok(())
     }

@@ -9,7 +9,7 @@
 //! cargo run --example stun_discover -- --port 51258
 //! ```
 
-use rustun::client::p2p::stun::{StunClient, NatType};
+use rustun::client::p2p::stun::{NatType, StunClient};
 use std::time::Duration;
 
 #[derive(clap::Parser, Debug)]
@@ -19,15 +19,15 @@ struct Args {
     /// Local UDP port to bind (0 for automatic)
     #[arg(short, long, default_value = "0")]
     port: u16,
-    
+
     /// Custom STUN server (can be specified multiple times)
     #[arg(short, long)]
     stun_server: Vec<String>,
-    
+
     /// Request timeout in seconds
     #[arg(short, long, default_value = "5")]
     timeout: u64,
-    
+
     /// Enable verbose logging
     #[arg(short, long)]
     verbose: bool,
@@ -37,16 +37,14 @@ struct Args {
 async fn main() {
     use clap::Parser;
     let args = Args::parse();
-    
+
     // Setup logging
     let log_level = if args.verbose { "debug" } else { "info" };
-    tracing_subscriber::fmt()
-        .with_env_filter(log_level)
-        .init();
-    
+    tracing_subscriber::fmt().with_env_filter(log_level).init();
+
     println!("🔍 STUN Discovery Tool");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    
+
     // Create STUN client
     let stun_client = if args.stun_server.is_empty() {
         println!("📡 Using default Google STUN servers");
@@ -55,35 +53,42 @@ async fn main() {
         println!("📡 Using custom STUN servers: {:?}", args.stun_server);
         StunClient::with_servers(args.stun_server)
     };
-    
+
     let stun_client = stun_client.with_timeout(Duration::from_secs(args.timeout));
-    
-    println!("🔌 Local port: {}", if args.port == 0 { "auto".to_string() } else { args.port.to_string() });
+
+    println!(
+        "🔌 Local port: {}",
+        if args.port == 0 {
+            "auto".to_string()
+        } else {
+            args.port.to_string()
+        }
+    );
     println!();
-    
+
     // Perform discovery
     println!("⏳ Discovering public address...");
     match stun_client.discover(args.port).await {
         Ok(result) => {
             println!("✅ STUN Discovery Successful!\n");
-            
+
             println!("📍 Results:");
             println!("   Local Address:  {}", result.local_addr);
             println!("   Public Address: {}", result.public_addr());
             println!("   Public IP:      {}", result.public_ip);
             println!("   Public Port:    {}", result.public_port);
             println!();
-            
+
             println!("🌐 NAT Information:");
             println!("   Type:           {:?}", result.nat_type);
             println!("   Description:    {}", result.nat_type.description());
             println!();
-            
+
             // Show P2P compatibility
             println!("🔗 P2P Compatibility:");
             show_p2p_compatibility(&result.nat_type);
             println!();
-            
+
             // Recommendations
             println!("💡 Recommendations:");
             match result.nat_type {
@@ -117,7 +122,7 @@ async fn main() {
             }
         }
         Err(e) => {
-            eprintln!("❌ STUN Discovery Failed: {}", e);
+            eprintln!("❌ STUN Discovery Failed: {e}");
             eprintln!();
             eprintln!("Possible reasons:");
             eprintln!("  - No internet connection");
@@ -137,7 +142,7 @@ fn show_p2p_compatibility(nat_type: &NatType) {
         ("Port-Restricted", NatType::PortRestricted),
         ("Symmetric NAT", NatType::Symmetric),
     ];
-    
+
     println!("   Success rates with different peer NAT types:");
     for (name, peer_nat) in &scenarios {
         let rate = nat_type.hole_punch_success_rate(peer_nat);
@@ -146,4 +151,3 @@ fn show_p2p_compatibility(nat_type: &NatType) {
         println!("   {:18} {:3}% {}", name, percentage, bar);
     }
 }
-

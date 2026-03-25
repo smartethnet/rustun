@@ -5,7 +5,6 @@ pub mod peer;
 pub mod stun;
 mod udp_server;
 
-
 /// Buffer size for outbound/inbound channels (2KB)
 const OUTBOUND_BUFFER_SIZE: usize = 2048;
 
@@ -20,6 +19,7 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 /// the connection is considered invalid and data sending will be rejected.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(15);
 
+#[derive(Debug)]
 struct PeerMeta {
     name: String,
     /// Unique identifier of the peer (e.g., client name)
@@ -33,30 +33,38 @@ struct PeerMeta {
     /// Traffic destined for these ranges will be routed to this peer
     ciders: Vec<String>,
 
-    /// Public IPv6 address of the peer for P2P connection
-    #[allow(unused)]
-    ipv6: String,
-
-    /// UDP port number for P2P communication
-    #[allow(unused)]
-    port: u16,
-
     /// Resolved socket address combining IPv6 and port ([ipv6]:port)
-    remote_addr: Option<SocketAddr>,
+    remote_addr: LastActive<Option<SocketAddr>>,
 
     /// Stun socket address
-    stun_addr: Option<SocketAddr>,
+    stun_addr: LastActive<Option<SocketAddr>>,
+}
 
-    /// Timestamp of last received packet from this peer
-    ///
-    /// - `None`: Never received any response (connection not established)
-    /// - `Some(instant)`: Last successful communication time
-    ///
-    /// This is used to validate connection health before sending data.
+#[derive(Debug, Clone)]
+struct LastActive<T> {
+    value: T,
     last_active: Option<Instant>,
-
-    /// last_hole_punch_active
-    stun_last_active: Option<Instant>,
+}
+impl<T> LastActive<T> {
+    pub fn dormant(value: T) -> Self {
+        Self {
+            value,
+            last_active: None,
+        }
+    }
+    pub fn restart(&mut self) {
+        self.last_active = Some(Instant::now());
+    }
+    pub fn activate(&mut self, value: T) {
+        self.value = value;
+        self.last_active = Some(Instant::now());
+    }
+    pub fn get(&self) -> &T {
+        &self.value
+    }
+    pub fn last_active(&self) -> Option<Instant> {
+        self.last_active
+    }
 }
 
 #[derive(Debug)]

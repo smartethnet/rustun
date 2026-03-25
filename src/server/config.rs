@@ -47,13 +47,13 @@ pub struct RouteConfig {
     pub routes_file: String,
 }
 
-pub fn load_main(path: &str) -> crate::Result<Config> {
+pub fn load_main(path: &str) -> anyhow::Result<Config> {
     let content = fs::read_to_string(path)?;
     let config: Config = toml::from_str(&content)?;
     Ok(config)
 }
 
-pub fn load_routes(path: &str) -> crate::Result<Vec<ClientConfig>> {
+pub fn load_routes(path: &str) -> anyhow::Result<Vec<ClientConfig>> {
     let content = fs::read_to_string(path)?;
     let clients: Vec<ClientConfig> = serde_json::from_str(&content)?;
     Ok(clients)

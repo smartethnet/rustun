@@ -92,4 +92,3 @@ pub struct ClusterPeerInfo {
     pub last_active: u64,
     pub status: String, // "online", "warning", "inactive", "offline"
 }
-

@@ -1,18 +1,14 @@
 //! HTTP request handlers
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
-use serde_json;
-use super::models::StatusResponse;
 use super::cache::get_cache;
+use super::models::StatusResponse;
+use axum::{extract::State, http::StatusCode, response::Json};
+use serde_json;
 
 /// Shared state for the HTTP server
 #[derive(Clone)]
 pub struct AppState {
-    status_cache: std::sync::Arc<tokio::sync::RwLock<Option<StatusResponse>>>,
+    status_cache: std::sync::Arc<std::sync::RwLock<Option<StatusResponse>>>,
 }
 
 impl AppState {
@@ -32,13 +28,10 @@ pub async fn health() -> Json<serde_json::Value> {
 }
 
 /// Status endpoint handler
-pub async fn status(
-    State(state): State<AppState>,
-) -> Result<Json<StatusResponse>, StatusCode> {
-    let cache = state.status_cache.read().await;
+pub async fn status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {
+    let cache = state.status_cache.read().unwrap();
     match cache.as_ref() {
         Some(status) => Ok(Json(status.clone())),
         None => Err(StatusCode::SERVICE_UNAVAILABLE),
     }
 }
-

@@ -4,9 +4,9 @@
 //! to discover the client's public IP address and NAT type, which is essential for
 //! P2P connection establishment.
 
-use std::net::{SocketAddr, IpAddr};
-use std::time::Duration;
 use anyhow::{Context, Result};
+use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
 
 /// NAT type classifications based on RFC 3489 and RFC 5780
 ///
@@ -20,23 +20,23 @@ use anyhow::{Context, Result};
 pub enum NatType {
     /// No NAT detected, client is directly on the public internet
     OpenInternet,
-    
+
     /// Full Cone NAT: Once an internal address is mapped to an external address,
     /// any external host can send packets to the internal host by sending to the mapped address
     FullCone,
-    
+
     /// Restricted Cone NAT: External hosts can send packets only if the internal host
     /// has previously sent a packet to that external IP (port doesn't matter)
     RestrictedCone,
-    
+
     /// Port-Restricted Cone NAT: External hosts can send packets only if the internal host
     /// has previously sent a packet to that specific external IP:port combination
     PortRestricted,
-    
+
     /// Symmetric NAT: Different external mapping for each destination.
     /// Most difficult for P2P hole punching
     Symmetric,
-    
+
     /// Unable to determine NAT type
     Unknown,
 }
@@ -57,7 +57,7 @@ impl NatType {
             _ => 0.30,
         }
     }
-    
+
     /// Returns human-readable description of the NAT type
     pub fn description(&self) -> &'static str {
         match self {
@@ -76,13 +76,13 @@ impl NatType {
 pub struct StunDiscoveryResult {
     /// Public IP address as seen by the STUN server
     pub public_ip: IpAddr,
-    
+
     /// Public port as seen by the STUN server
     pub public_port: u16,
-    
+
     /// Detected NAT type
     pub nat_type: NatType,
-    
+
     /// Local address used for the STUN query
     pub local_addr: SocketAddr,
 }
@@ -101,7 +101,7 @@ impl StunDiscoveryResult {
 pub struct StunClient {
     /// List of STUN servers to query (format: "host:port")
     stun_servers: Vec<String>,
-    
+
     /// Timeout for STUN requests
     timeout: Duration,
 }
@@ -122,7 +122,7 @@ impl StunClient {
             "global.stun.twilio.com:3478".to_string(),
         ])
     }
-    
+
     /// Creates a new STUN client with custom STUN servers
     ///
     /// # Arguments
@@ -140,7 +140,7 @@ impl StunClient {
             timeout: Duration::from_secs(5),
         }
     }
-    
+
     /// Sets the timeout for STUN requests
     ///
     /// # Arguments
@@ -149,7 +149,7 @@ impl StunClient {
         self.timeout = timeout;
         self
     }
-    
+
     /// Discovers public IP address and port by querying STUN servers
     ///
     /// This performs a simple STUN binding request to discover the client's
@@ -170,17 +170,20 @@ impl StunClient {
     ///     .await?;
     /// println!("Public address: {}:{}", public_ip, public_port);
     /// ```
-    pub async fn discover_public_address(&self, local_port: u16) -> Result<(SocketAddr, IpAddr, u16)> {
+    pub async fn discover_public_address(
+        &self,
+        local_port: u16,
+    ) -> Result<(SocketAddr, IpAddr, u16)> {
         let local_addr = if local_port == 0 {
             "0.0.0.0:0"
         } else {
             &format!("0.0.0.0:{}", local_port)
         };
-        
+
         // Try each STUN server until one succeeds
         for stun_server in &self.stun_servers {
             tracing::debug!("Querying STUN server: {}", stun_server);
-            
+
             match self.query_stun_server(local_addr, stun_server).await {
                 Ok((local, ip, port)) => {
                     tracing::info!(
@@ -197,10 +200,10 @@ impl StunClient {
                 }
             }
         }
-        
+
         anyhow::bail!("All STUN servers failed")
     }
-    
+
     /// Performs full STUN discovery including NAT type detection
     ///
     /// This performs a comprehensive STUN discovery that includes:
@@ -222,7 +225,8 @@ impl StunClient {
     /// ```
     pub async fn discover(&self, local_port: u16) -> Result<StunDiscoveryResult> {
         // Step 1: Discover public address
-        let (local_addr, public_ip, public_port) = self.discover_public_address(local_port)
+        let (local_addr, public_ip, public_port) = self
+            .discover_public_address(local_port)
             .await
             .context("Failed to discover public address")?;
 
@@ -232,11 +236,13 @@ impl StunClient {
             public_port,
             local_addr.to_string(),
         );
-        
+
         // Step 2: Detect NAT type
         // For now, use a simplified detection based on address comparison
-        let nat_type = self.detect_nat_type_simple(local_addr.clone(), public_ip, public_port).await;
-        
+        let nat_type = self
+            .detect_nat_type_simple(local_addr, public_ip, public_port)
+            .await;
+
         tracing::info!(
             "NAT type detected: {:?} ({})",
             nat_type,
@@ -250,7 +256,7 @@ impl StunClient {
             local_addr,
         })
     }
-    
+
     /// Queries a single STUN server using the stunclient library
     async fn query_stun_server(
         &self,
@@ -258,15 +264,15 @@ impl StunClient {
         stun_server: &str,
     ) -> Result<(SocketAddr, IpAddr, u16)> {
         use std::net::UdpSocket;
-        
+
         // Create UDP socket
-        let socket = UdpSocket::bind(local_addr)
-            .context("Failed to bind UDP socket")?;
+        let socket = UdpSocket::bind(local_addr).context("Failed to bind UDP socket")?;
         let local_addr = socket.local_addr()?;
         // Set socket timeout
-        socket.set_read_timeout(Some(self.timeout))
+        socket
+            .set_read_timeout(Some(self.timeout))
             .context("Failed to set socket timeout")?;
-        
+
         // Resolve STUN server address (may be hostname or IP)
         let server_addr: SocketAddr = if let Ok(addr) = stun_server.parse() {
             // Already a valid SocketAddr
@@ -281,21 +287,20 @@ impl StunClient {
                 .next()
                 .context("No addresses resolved for STUN server")?
         };
-        
+
         // Create STUN client
         let stun_client = stunclient::StunClient::new(server_addr);
-        
+
         // Query external address
-        let external_addr = tokio::task::spawn_blocking(move || {
-            stun_client.query_external_address(&socket)
-        })
-        .await
-        .context("STUN query task panicked")?
-        .context("Failed to get external address")?;
-        
+        let external_addr =
+            tokio::task::spawn_blocking(move || stun_client.query_external_address(&socket))
+                .await
+                .context("STUN query task panicked")?
+                .context("Failed to get external address")?;
+
         Ok((local_addr, external_addr.ip(), external_addr.port()))
     }
-    
+
     /// Simplified NAT type detection based on address comparison
     ///
     /// This is a basic heuristic:
@@ -314,24 +319,24 @@ impl StunClient {
     ) -> NatType {
         let local_ip = local_addr.ip();
         let local_port = local_addr.port();
-        
+
         // Check if we're directly on the public internet
         if local_ip == public_ip && local_port == public_port {
             return NatType::OpenInternet;
         }
-        
+
         // If port is preserved, likely Full Cone NAT
         if local_port == public_port {
             tracing::debug!("Port preserved, likely Full Cone NAT");
             return NatType::FullCone;
         }
-        
+
         // Port changed, conservatively assume Port-Restricted Cone
         // (most common in modern routers)
         tracing::debug!("Port changed, assuming Port-Restricted Cone NAT");
         NatType::PortRestricted
     }
-    
+
     /// Advanced NAT type detection using RFC 5780 behavioral tests
     ///
     /// This would require:
@@ -345,7 +350,7 @@ impl StunClient {
         // TODO: Implement full RFC 5780 NAT type detection
         // This requires a STUN server that supports RFC 5780 extensions
         // Most public STUN servers only support basic RFC 5389
-        
+
         tracing::warn!("Advanced NAT detection not yet implemented, using simplified detection");
         Ok(NatType::Unknown)
     }
@@ -360,13 +365,16 @@ impl Default for StunClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_nat_type_descriptions() {
-        assert_eq!(NatType::OpenInternet.description(), "No NAT (Public Internet)");
+        assert_eq!(
+            NatType::OpenInternet.description(),
+            "No NAT (Public Internet)"
+        );
         assert_eq!(NatType::FullCone.description(), "Full Cone NAT (Easy P2P)");
     }
-    
+
     #[test]
     fn test_hole_punch_success_rates() {
         // Best case: both on public internet
@@ -374,24 +382,20 @@ mod tests {
             NatType::OpenInternet.hole_punch_success_rate(&NatType::OpenInternet),
             1.0
         );
-        
+
         // Worst case: both symmetric NAT
-        assert!(
-            NatType::Symmetric.hole_punch_success_rate(&NatType::Symmetric) < 0.2
-        );
-        
+        assert!(NatType::Symmetric.hole_punch_success_rate(&NatType::Symmetric) < 0.2);
+
         // Good case: both full cone
-        assert!(
-            NatType::FullCone.hole_punch_success_rate(&NatType::FullCone) > 0.9
-        );
+        assert!(NatType::FullCone.hole_punch_success_rate(&NatType::FullCone) > 0.9);
     }
-    
+
     #[tokio::test]
     #[ignore] // Requires network access
     async fn test_stun_discovery() {
         let client = StunClient::new();
         let result = client.discover_public_address(0).await;
-        
+
         // This test is ignored by default as it requires internet access
         // Run with: cargo test test_stun_discovery -- --ignored
         if let Ok((_, ip, port)) = result {
@@ -400,4 +404,3 @@ mod tests {
         }
     }
 }
-

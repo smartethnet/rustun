@@ -84,7 +84,7 @@ impl Block for XorBlock {
     ///
     /// # Returns
     /// * Always returns `Ok(())`
-    fn encrypt(&self, data: &mut Vec<u8>) -> crate::Result<()> {
+    fn encrypt(&self, data: &mut Vec<u8>) -> anyhow::Result<()> {
         self.xor_data(data);
         Ok(())
     }
@@ -99,7 +99,7 @@ impl Block for XorBlock {
     ///
     /// # Returns
     /// * Always returns `Ok(())`
-    fn decrypt(&self, data: &mut Vec<u8>) -> crate::Result<()> {
+    fn decrypt(&self, data: &mut Vec<u8>) -> anyhow::Result<()> {
         // XOR encryption is symmetric: decrypt is the same as encrypt
         self.xor_data(data);
         Ok(())

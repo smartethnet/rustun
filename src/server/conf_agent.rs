@@ -1,11 +1,12 @@
-use std::collections::HashMap;
+use crate::network::connection_manager::ConnectionManager;
 use crate::server::client_manager::{ClientConfig, ClientManager};
 use crate::server::config::ConfAgentConfig;
-use crate::network::connection_manager::ConnectionManager;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::fs;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 
 /// Connection update request for backend API
 #[derive(Serialize, Debug)]
@@ -36,7 +37,6 @@ pub struct ConfAgent {
     routes_file: String,
 }
 
-
 impl ConfAgent {
     pub fn new(
         config: ConfAgentConfig,
@@ -53,7 +53,7 @@ impl ConfAgent {
     }
 
     /// Start the conf-agent service
-    pub async fn start(self: Arc<Self>) -> crate::Result<()> {
+    pub async fn start(self: Arc<Self>) -> anyhow::Result<()> {
         tracing::info!("Starting conf-agent");
         tracing::info!("Control plane URL: {}", self.config.control_plane_url);
         tracing::info!("Routes file: {}", self.config.routes_file);
@@ -61,10 +61,10 @@ impl ConfAgent {
 
         // Initial fetch and report
         if let Err(e) = self.fetch_and_update_routes().await {
-            tracing::error!("Failed to fetch routes: {:?}", e);
+            tracing::error!("Failed to fetch routes: {e:?}");
         }
         if let Err(e) = self.report_connections().await {
-            tracing::error!("Failed to report connections: {:?}", e);
+            tracing::error!("Failed to report connections: {e:?}");
         }
 
         // Periodic tasks: route fetching and connection reporting
@@ -75,12 +75,12 @@ impl ConfAgent {
             tokio::select! {
                 _ = route_ticker.tick() => {
                     if let Err(e) = self.fetch_and_update_routes().await {
-                        tracing::error!("Failed to fetch routes: {:?}", e);
+                        tracing::error!("Failed to fetch routes: {e:?}");
                     }
                 }
                 _ = report_ticker.tick() => {
                     if let Err(e) = self.report_connections().await {
-                        tracing::error!("Failed to report connections: {:?}", e);
+                        tracing::error!("Failed to report connections: {e:?}");
                     }
                 }
             }
@@ -88,7 +88,7 @@ impl ConfAgent {
     }
 
     /// Report connections from connection manager
-    async fn report_connections(&self) -> crate::Result<()> {
+    async fn report_connections(&self) -> anyhow::Result<()> {
         // Get connections from connection manager
         let connections = self.connection_manager.dump_connection_info();
 
@@ -132,7 +132,7 @@ impl ConfAgent {
     }
 
     /// Fetch routes from control plane and update local routes file
-    async fn fetch_and_update_routes(&self) -> crate::Result<()> {
+    async fn fetch_and_update_routes(&self) -> anyhow::Result<()> {
         tracing::debug!("Fetching routes from control plane...");
 
         let url = format!("{}/api/sync/clients", self.config.control_plane_url);
@@ -152,26 +152,9 @@ impl ConfAgent {
     }
 
     /// Fetch routes from control plane API
-    async fn fetch_routes(
-        url: &str,
-        token: Option<&str>,
-    ) -> crate::Result<Vec<ClientConfig>> {
-        let mut request = ureq::get(url).timeout(Duration::from_secs(30));
-
-        if let Some(token) = token {
-            request = request.set("Authorization", &format!("Bearer {}", token));
-        }
-
-        let response = request.call()?;
-
-        let status = response.status();
-        let body = response.into_string()?;
-        
-        if status != 200 {
-            return Err(format!("Control plane returned error: {} - {}", status, body).into());
-        }
-
-        let routes: Vec<ClientConfigResponse> = serde_json::from_str(&body)?;
+    async fn fetch_routes(url: &str, token: Option<&str>) -> anyhow::Result<Vec<ClientConfig>> {
+        let body = http_json(url, token, Input::Get).await?.unwrap();
+        let routes: Vec<ClientConfigResponse> = serde_json::from_value(body)?;
 
         // Convert to ClientConfig format
         let client_configs: Vec<ClientConfig> = routes
@@ -192,7 +175,7 @@ impl ConfAgent {
     }
 
     /// Write routes to file atomically
-    async fn write_routes(file_path: &str, routes: &[ClientConfig]) -> crate::Result<()> {
+    async fn write_routes(file_path: &str, routes: &[ClientConfig]) -> anyhow::Result<()> {
         // Ensure parent directory exists
         if let Some(parent) = std::path::Path::new(file_path).parent() {
             fs::create_dir_all(parent).await?;
@@ -209,32 +192,60 @@ impl ConfAgent {
         Ok(())
     }
 
-
     /// Send connection updates to control plane API
     async fn send_connection_updates(
         url: &str,
         token: Option<&str>,
         updates: &[ConnectionUpdateRequest],
-    ) -> crate::Result<()> {
-        let json_data = serde_json::to_string(updates)?;
-
-        let mut request = ureq::post(url)
-            .set("Content-Type", "application/json")
-            .timeout(Duration::from_secs(30));
-
-        if let Some(token) = token {
-            request = request.set("Authorization", &format!("Bearer {}", token));
-        }
-
-        let response = request.send_string(&json_data)?;
-        let status = response.status();
-        let body = response.into_string()?;
-
-        if status != 200 {
-            return Err(format!("Backend returned error: {} - {}", status, body).into());
-        }
-
+    ) -> anyhow::Result<()> {
+        let updates = serde_json::to_value(updates)?;
+        http_json(url, token, Input::Post(updates)).await?;
         Ok(())
     }
 }
 
+#[derive(Debug, Clone)]
+enum Input {
+    Get,
+    Post(serde_json::Value),
+}
+async fn http_json(
+    url: &str,
+    token: Option<&str>,
+    input: Input,
+) -> anyhow::Result<Option<serde_json::Value>> {
+    use tokio::time::timeout_at;
+    let method = match &input {
+        Input::Get => reqwest::Method::GET,
+        Input::Post(_) => reqwest::Method::POST,
+    };
+    let mut request = reqwest::Request::new(method, url.parse()?);
+    if let Input::Post(input) = &input {
+        request
+            .headers_mut()
+            .insert("Content-Type", "application/json".try_into().unwrap());
+        let body = serde_json::to_vec(input)?;
+        *request.body_mut() = Some(body.into());
+    }
+    if let Some(token) = token {
+        request
+            .headers_mut()
+            .insert("Authorization", format!("Bearer {token}").try_into()?);
+    }
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let client = reqwest::Client::new();
+    let response = timeout_at(deadline.into(), client.execute(request)).await??;
+    let status = response.status();
+    let body = timeout_at(deadline.into(), response.bytes()).await;
+    if status != 200 {
+        return Err(anyhow::anyhow!(
+            "Control plane returned error: {status} - {body:?}"
+        ));
+    }
+    let body = body??;
+    let body = match &input {
+        Input::Get => serde_json::from_slice(&body)?,
+        Input::Post(_) => None,
+    };
+    Ok(body)
+}

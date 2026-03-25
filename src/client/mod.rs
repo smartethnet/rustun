@@ -1,10 +1,10 @@
 use clap::Parser;
 
-mod relay;
-pub mod main;
-mod prettylog;
-pub mod p2p;
 pub mod http;
+pub mod main;
+pub mod p2p;
+mod prettylog;
+mod relay;
 
 /// Default P2P UDP port for client-to-client direct connections
 ///

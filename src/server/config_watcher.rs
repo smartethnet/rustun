@@ -1,7 +1,7 @@
+use crate::server::client_manager::ClientManager;
+use crate::server::config;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::server::client_manager::{ClientManager};
-use crate::server::config;
 
 const RELOAD_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -31,7 +31,7 @@ impl ConfigWatcher {
                         client_manager.rewrite_clients_config(client_routes);
                     }
                     Err(e) => {
-                        tracing::error!("load client routes error: {}", e);
+                        tracing::error!("load client routes error: {e}");
                     }
                 }
                 tokio::time::sleep(RELOAD_INTERVAL).await;
