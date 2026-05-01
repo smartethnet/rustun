@@ -85,8 +85,8 @@ sudo ./client -s SERVER_IP:8080 -i client-identity
 - [x] Dual-path networking with intelligent failover
 - [x] Real-time connection monitoring
 - [x] Dynamic route updates (no restart needed)
-- [ ] Web-based management dashboard
-- [ ] Mobile & Desktop clients (Android/iOS/Windows/macOS)
+- [x] Web-based management dashboard
+- [x] Mobile & Desktop clients (Android/iOS/Windows/macOS)
 - [ ] QUIC protocol support
 - [ ] Docker images & Kubernetes operator
 - [ ] Windows service support
